@@ -97,12 +97,15 @@ SQLite) → seed → typecheck → build on every push/PR. Keep it green.
 
 - **Auth:** basic owner password gate shipped (see Architecture). Passkeys/
   Face ID still open (SPEC §32). Never deploy with `APP_PASSWORD` unset.
-- **Deploy (Vercel):** the `build` script self-applies the schema on Vercel
-  only — `$VERCEL` gates a `prisma db push`, preferring the unpooled
+- **Deploy (Vercel):** the `build` script (scripts/vercel-build.sh)
+  self-applies the schema on Vercel only, preferring the unpooled
   `DATABASE_URL_UNPOOLED` the Neon integration injects (DDL through the
-  pooler is unreliable); local/CI builds skip it. Project expectations:
-  root directory `twin-oaks-app`, production branch = the current dev
-  branch, Neon Postgres + Blob store connected, `APP_PASSWORD` set.
+  pooler is unreliable); the runtime self-heal in `ensure-schema.ts` is the
+  real safety net. Project: repo `gschiemann/twin-oaks-app`, production
+  branch `main`, root directory = repo root, Neon Postgres + Blob store
+  connected, `APP_PASSWORD` set. `/api/health` reports the deployed phase
+  (public, gate-exempt) — bump its `phase` string when you need to verify a
+  deploy landed.
 - OCR receipt auto-read, duplicate detection, CSV/PDF accountant package:
   deferred (see ROADMAP "V1 gaps").
 - V2 = customers/invoices/payments/mileage/banking; V3 = sheep; V4 = print
