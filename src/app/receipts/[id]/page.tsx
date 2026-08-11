@@ -36,6 +36,21 @@ export default async function ReceiptDetailPage({
         sub={`Status: ${RECEIPT_STATUS_LABELS[receipt.status as ReceiptStatus] ?? receipt.status}`}
       />
 
+      {receipt.source === "EMAIL" ? (
+        <Card className="mb-4 border-sky-200 bg-sky-50">
+          <p className="text-sm font-medium text-sky-900">✉️ Forwarded by email</p>
+          {receipt.emailFrom ? (
+            <p className="text-xs text-sky-800">From {receipt.emailFrom}</p>
+          ) : null}
+          {receipt.emailSubject ? (
+            <p className="truncate text-xs text-sky-800">“{receipt.emailSubject}”</p>
+          ) : null}
+          <p className="mt-1 text-xs text-sky-700">
+            Details below were read automatically — check them before categorizing.
+          </p>
+        </Card>
+      ) : null}
+
       {receipt.filePath ? (
         <a
           href={fileSrc(receipt.filePath)}
@@ -52,7 +67,9 @@ export default async function ReceiptDetailPage({
             />
           ) : (
             <Card className="text-center text-sm font-medium text-stone-600">
-              📄 {receipt.fileName ?? "Document"} — tap to open
+              {receipt.source === "EMAIL"
+                ? "✉️ Open the forwarded email"
+                : `📄 ${receipt.fileName ?? "Document"} — tap to open`}
             </Card>
           )}
         </a>

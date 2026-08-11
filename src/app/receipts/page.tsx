@@ -78,18 +78,21 @@ export default async function ReceiptsPage({
           {receipts.map((r) => (
             <Link key={r.id} href={`/receipts/${r.id}`} className="block">
               <Card className="flex items-center gap-3 active:bg-stone-50">
-                <ReceiptThumb filePath={r.filePath} mimeType={r.mimeType} />
+                <ReceiptThumb filePath={r.filePath} mimeType={r.mimeType} source={r.source} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold text-stone-900">
                     {r.vendorName ?? "Unknown vendor"}
                   </div>
-                  <div className="text-sm text-stone-500">
-                    {formatDate(r.receiptDate)} · added {formatDate(r.createdAt)}
+                  <div className="truncate text-sm text-stone-500">
+                    {r.source === "EMAIL" && r.emailSubject
+                      ? r.emailSubject
+                      : `${formatDate(r.receiptDate)} · added ${formatDate(r.createdAt)}`}
                   </div>
-                  <div className="mt-1">
+                  <div className="mt-1 flex flex-wrap gap-1.5">
                     <Chip tone={receiptStatusTone(r.status)}>
                       {RECEIPT_STATUS_LABELS[r.status as ReceiptStatus] ?? r.status}
                     </Chip>
+                    {r.source === "EMAIL" ? <Chip tone="blue">✉️ Emailed in</Chip> : null}
                   </div>
                 </div>
                 <div className="text-right font-bold tabular-nums text-stone-900">

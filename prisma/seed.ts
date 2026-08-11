@@ -291,6 +291,29 @@ async function main() {
     },
   });
 
+  // A receipt that arrived by forwarded email (no attachment — the message
+  // body is the document, the way Amazon/Apple receipts arrive).
+  await writeFile(
+    path.join(uploadDir, "seed-email-receipt.html"),
+    "<html><body><h2>Bambu Lab</h2><p>Order #BL-55129</p><p>PLA filament — 6 spools</p><p>Order Total: $119.94</p></body></html>",
+  );
+  await prisma.receipt.create({
+    data: {
+      status: "INBOX",
+      source: "EMAIL",
+      emailFrom: "greg@example.com",
+      emailSubject: "Fwd: Your Bambu Lab order confirmation",
+      filePath: "seed-email-receipt.html",
+      fileName: "Fwd_ Your Bambu Lab order confirmation.html",
+      mimeType: "text/html",
+      vendorName: "Bambu Lab",
+      receiptDate: new Date(2026, 7, 1, 12),
+      totalCents: 11994,
+      receiptNumber: "BL-55129",
+      notes: "Forwarded email: Fwd: Your Bambu Lab order confirmation",
+    },
+  });
+
   // --- Income -------------------------------------------------------------
   await prisma.income.create({
     data: {

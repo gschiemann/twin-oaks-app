@@ -7,6 +7,7 @@ const links = [
   { href: "/invoices?kind=QUOTE", label: "Quotes", desc: "Price a job first — convert to an invoice on yes" },
   { href: "/customers", label: "Customers", desc: "Profiles, revenue, and open balances" },
   { href: "/mileage", label: "Mileage", desc: "Business trips logged for tax time" },
+  { href: "/settings/email", label: "Email receipts", desc: "Forward a receipt from your inbox — it lands in the Inbox" },
   { href: "/assets", label: "Equipment & assets", desc: "Tractors, printers, trailers — profiles and maintenance" },
   { href: "/tax", label: "Tax Center", desc: "Year totals, flagged items, category breakdowns" },
   { href: "/search", label: "Search", desc: "Find any expense, receipt, or record in seconds" },

@@ -17,6 +17,11 @@ without creating extra bookkeeping work.
 - **Dashboard** — month/YTD revenue, expenses, net; Farm vs Tech split; flags
 - **Receipts** — snap a photo → lands in the **Inbox** → categorize when you
   have time; originals stored permanently; PDF + attach-later supported
+- **Email-forwarded receipts** — forward any receipt email to your inbound
+  address and it lands in the Inbox with vendor, total, tax, date and
+  receipt number auto-read where they can be found confidently. Setup and
+  status live at **Settings → Email receipts**; see `INBOUND_EMAIL_*` in
+  `.env.example`
 - **Expenses** — dual categorization (accounting category for the books,
   management category for "where the money really went"), business purpose,
   tax year, capital-purchase flag, connect to equipment

@@ -1,4 +1,4 @@
-import { ReceiptIcon } from "@/components/Icons";
+import { MailIcon, ReceiptIcon } from "@/components/Icons";
 import { fileSrc } from "@/lib/storage";
 
 export function receiptStatusTone(status: string): string {
@@ -20,10 +20,12 @@ export function receiptStatusTone(status: string): string {
 export function ReceiptThumb({
   filePath,
   mimeType,
+  source,
   size = "h-14 w-14",
 }: {
   filePath: string | null;
   mimeType: string | null;
+  source?: string | null;
   size?: string;
 }) {
   if (filePath && mimeType?.startsWith("image/")) {
@@ -36,11 +38,15 @@ export function ReceiptThumb({
       />
     );
   }
+  // A forwarded email with no attachment: the message body IS the document.
+  const isEmailBody = source === "EMAIL" && !mimeType?.startsWith("image/");
   return (
     <div
-      className={`${size} flex shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-stone-400`}
+      className={`${size} flex shrink-0 items-center justify-center rounded-xl border ${
+        isEmailBody ? "border-oak-200 bg-oak-50 text-oak-600" : "border-stone-200 bg-stone-50 text-stone-400"
+      }`}
     >
-      <ReceiptIcon className="h-6 w-6" />
+      {isEmailBody ? <MailIcon className="h-6 w-6" /> : <ReceiptIcon className="h-6 w-6" />}
     </div>
   );
 }

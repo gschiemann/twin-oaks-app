@@ -30,6 +30,10 @@ model Vendor {
 model Receipt {
   id            String    @id @default(cuid())
   status        String    @default("INBOX") // see RECEIPT_STATUSES in src/lib/domain.ts
+  // UPLOAD (camera/file picker) | EMAIL (forwarded to the inbound address)
+  source        String    @default("UPLOAD")
+  emailFrom     String?
+  emailSubject  String?
   filePath      String? // storage key under UPLOAD_DIR; null = record without a file yet
   fileName      String?
   mimeType      String?

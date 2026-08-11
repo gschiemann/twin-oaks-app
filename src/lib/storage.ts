@@ -24,34 +24,48 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/heic": ".heic",
   "image/heif": ".heif",
   "image/webp": ".webp",
+  "image/gif": ".gif",
   "application/pdf": ".pdf",
+  "text/html": ".html",
+  "text/plain": ".txt",
 };
 
-export async function saveUpload(file: File): Promise<{
+export type StoredFile = {
   storageKey: string;
   fileName: string;
   mimeType: string;
   fileSize: number;
-}> {
-  const bytes = Buffer.from(await file.arrayBuffer());
-  const ext =
-    EXT_BY_MIME[file.type] ?? path.extname(file.name).slice(0, 10) ?? "";
-  const mimeType = file.type || "application/octet-stream";
-  const fileName = file.name || "upload";
+};
+
+// Core writer — used by browser uploads and by the inbound-email webhook
+// (which already holds decoded Buffers, not File objects).
+export async function saveBuffer(
+  bytes: Buffer,
+  fileName: string,
+  mimeType: string,
+): Promise<StoredFile> {
+  const type = mimeType || "application/octet-stream";
+  const name = fileName || "upload";
+  const ext = EXT_BY_MIME[type] ?? path.extname(name).slice(0, 10) ?? "";
   const generatedName = `${crypto.randomUUID()}${ext}`;
 
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     const { put } = await import("@vercel/blob");
     const blob = await put(`receipts/${generatedName}`, bytes, {
       access: "public",
-      contentType: mimeType,
+      contentType: type,
     });
-    return { storageKey: blob.url, fileName, mimeType, fileSize: bytes.byteLength };
+    return { storageKey: blob.url, fileName: name, mimeType: type, fileSize: bytes.byteLength };
   }
 
   await mkdir(uploadRoot(), { recursive: true });
   await writeFile(path.join(uploadRoot(), generatedName), bytes);
-  return { storageKey: generatedName, fileName, mimeType, fileSize: bytes.byteLength };
+  return { storageKey: generatedName, fileName: name, mimeType: type, fileSize: bytes.byteLength };
+}
+
+export async function saveUpload(file: File): Promise<StoredFile> {
+  const bytes = Buffer.from(await file.arrayBuffer());
+  return saveBuffer(bytes, file.name, file.type);
 }
 
 // Resolve a stored key to something an <img src> / link can use.

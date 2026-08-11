@@ -85,6 +85,13 @@ export const TractorIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const MailIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="2.5" y="5" width="19" height="14" rx="2" />
+    <path d="m3 7 9 6 9-6" />
+  </Svg>
+);
+
 export const ChevronRightIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="m9 6 6 6-6 6" />

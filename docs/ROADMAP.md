@@ -42,9 +42,10 @@ _Revenue-loop slice shipped 2026-08-11:_
 | Invoices | ✅ | Draft → sent lifecycle, line-item editor, auto numbering (INV-NNN), sales tax, derived paid/partial/overdue status, printable/PDF view; drafts editable, sent invoices immutable |
 | Payments | ✅ | Recorded against invoices; **auto-posts a linked Income row** (division-appropriate SPEC §25 category) so the books need no double entry; removing a payment removes its income row |
 | Mileage | ✅ | SPEC §19 trips (odometer or direct miles), vehicle link advances Asset.currentMileage, YTD totals, Tax Center line. No auto-deduction math — rate is the accountant's call |
-| Quotes | ⬜ | Planned: invoice `kind` variant with convert-to-invoice |
-| Bank transaction matching | ⬜ | |
-| Better tax reports / accountant export (CSV/PDF/ZIP, SPEC §28) | ⬜ | JSON backup exists today |
+| Quotes | ✅ | `kind=QUOTE` on the Invoice table, `Q-NNN` numbering, no payments, printable "QUOTE" view, one-tap convert → fresh draft invoice (quote stamped ACCEPTED); excluded from every owed-money rollup |
+| Accountant export (SPEC §28) | ✅ | Six per-year CSVs from the Tax Center: expenses, income, P&L (per-division + business miles), category totals, mileage, asset register. PDF/ZIP-with-receipt-images still to come |
+| **Email-forwarded receipts** (SPEC §37) | ✅ | Forward a receipt to the inbound address → lands in the Receipt Inbox with vendor/total/tax/date/receipt-number auto-read, original email or attachment stored permanently. Provider-agnostic webhook (`/api/inbound/email/<secret>`) handling CloudMailin / Postmark / SendGrid / Mailgun JSON **and** multipart. Setup page at Settings → Email receipts |
+| Bank transaction matching | ⬜ | Needs a sample bank CSV to build against |
 
 ## V3 — Farm / livestock (SPEC §35)
 

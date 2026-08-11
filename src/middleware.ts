@@ -21,6 +21,8 @@ export async function middleware(req: NextRequest) {
   return NextResponse.redirect(url);
 }
 
+// api/inbound is exempt because email providers post to it without a
+// session; it authenticates itself with a shared secret (see that route).
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|login|api/health).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|login|api/health|api/inbound).*)"],
 };

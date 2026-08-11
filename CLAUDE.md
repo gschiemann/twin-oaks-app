@@ -81,7 +81,18 @@ feature work.
   DDL (`prisma migrate diff --from-empty --to-schema-datamodel
   prisma/schema.prisma --script`), keep statements idempotent (IF NOT
   EXISTS / duplicate_object guards), and point the probe at the NEWEST
-  table so existing databases self-upgrade.
+  schema element (table *or* column) so existing databases self-upgrade.
+- **Inbound email** (`/api/inbound/email/[[...secret]]`): public by
+  necessity — providers can't carry the session cookie — so it is exempted
+  in `middleware.ts` and authenticates with a constant-time-compared shared
+  secret (`INBOUND_EMAIL_SECRET`) plus an optional sender allowlist. It
+  answers 200 on *soft* failures (duplicate, unlisted sender) because
+  providers retry hard on non-2xx; 401 only for a bad secret. Provider
+  payload shapes are normalized in `src/lib/inbound-email.ts` (pure, no
+  Prisma) — add new provider field names there, not in the route.
+  Stored email bodies are attacker-influenced, so `/api/files` serves every
+  document under `Content-Security-Policy: sandbox` + `nosniff`; never
+  relax that.
 
 ## Commands
 
