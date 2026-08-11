@@ -80,7 +80,7 @@ export default async function DashboardPage() {
     prisma.expense.findMany({ orderBy: { date: "desc" }, take: 5 }),
     prisma.income.findMany({ orderBy: { date: "desc" }, take: 3 }),
     prisma.invoice.findMany({
-      where: { status: "SENT" },
+      where: { status: "SENT", kind: "INVOICE" },
       include: { payments: { select: { amountCents: true } } },
     }),
   ]);

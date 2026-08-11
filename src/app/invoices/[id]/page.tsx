@@ -20,7 +20,7 @@ import {
   invoiceStatusTone,
   paidCentsOf,
 } from "../invoice-bits";
-import { deleteInvoice, deletePayment, recordPayment, setInvoiceStatus } from "../actions";
+import { convertQuote, deleteInvoice, deletePayment, recordPayment, setInvoiceStatus } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +28,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   "not-draft": "Only draft invoices can be edited — once sent, an invoice is a financial record.",
   cancelled: "Payments can't be recorded on a cancelled invoice.",
   amount: "That payment needs a valid amount — nothing was recorded.",
+  quote: "Quotes don't take payments — convert it to an invoice first.",
 };
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -62,6 +63,13 @@ export default async function InvoiceDetailPage({
   const paidCents = paidCentsOf(invoice.payments);
   const status = deriveInvoiceStatus(invoice, paidCents);
   const balanceCents = invoice.totalCents - paidCents;
+  const isQuote = invoice.kind === "QUOTE";
+  const acceptedInvoice = invoice.convertedToInvoiceId
+    ? await prisma.invoice.findUnique({
+        where: { id: invoice.convertedToInvoiceId },
+        select: { id: true, number: true },
+      })
+    : null;
 
   return (
     <div>
@@ -140,23 +148,48 @@ export default async function InvoiceDetailPage({
             <span>Total</span>
             <span className="tabular-nums">{formatCents(invoice.totalCents)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-stone-500">Paid</span>
-            <span className="font-medium tabular-nums text-oak-700">{formatCents(paidCents)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-stone-500">Balance due</span>
-            <span
-              className={`font-semibold tabular-nums ${
-                balanceCents > 0 ? "text-red-700" : "text-stone-900"
-              }`}
-            >
-              {formatCents(balanceCents)}
-            </span>
-          </div>
+          {!isQuote ? (
+            <>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Paid</span>
+                <span className="font-medium tabular-nums text-oak-700">{formatCents(paidCents)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Balance due</span>
+                <span
+                  className={`font-semibold tabular-nums ${
+                    balanceCents > 0 ? "text-red-700" : "text-stone-900"
+                  }`}
+                >
+                  {formatCents(balanceCents)}
+                </span>
+              </div>
+            </>
+          ) : null}
         </div>
       </Card>
 
+      {isQuote && acceptedInvoice ? (
+        <Card className="mb-4 border-oak-200 bg-oak-50">
+          <p className="text-sm text-oak-900">
+            ✅ Accepted — invoiced as{" "}
+            <Link href={`/invoices/${acceptedInvoice.id}`} className="font-semibold underline">
+              {acceptedInvoice.number}
+            </Link>
+          </p>
+        </Card>
+      ) : null}
+
+      {isQuote && !acceptedInvoice && invoice.status !== "CANCELLED" ? (
+        <form action={convertQuote} className="mb-4">
+          <input type="hidden" name="id" value={invoice.id} />
+          <button type="submit" className={`${btnPrimaryCls} w-full`}>
+            Customer said yes → convert to invoice
+          </button>
+        </form>
+      ) : null}
+
+      {!isQuote ? (
       <Card className="mb-4">
         <h2 className="mb-2 font-semibold text-stone-900">
           Payments {invoice.payments.length > 0 ? `(${invoice.payments.length})` : ""}
@@ -260,6 +293,7 @@ export default async function InvoiceDetailPage({
           </details>
         ) : null}
       </Card>
+      ) : null}
 
       {invoice.status === "DRAFT" ? (
         <>
@@ -308,7 +342,7 @@ export default async function InvoiceDetailPage({
               type="submit"
               className="text-sm font-medium text-red-600 underline-offset-2 active:underline"
             >
-              Cancel invoice
+              {isQuote ? "Cancel quote" : "Cancel invoice"}
             </button>
           </form>
         </div>

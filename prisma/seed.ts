@@ -408,6 +408,34 @@ async function main() {
     },
   });
 
+  await prisma.invoice.create({
+    data: {
+      number: "Q-001",
+      kind: "QUOTE",
+      customerId: acme.id,
+      division: "TECH",
+      status: "SENT",
+      issueDate: new Date(2026, 7, 10, 12),
+      dueDate: new Date(2026, 8, 10, 12),
+      terms: "Valid for 30 days",
+      taxYear: 2026,
+      subtotalCents: 89500,
+      salesTaxCents: 0,
+      totalCents: 89500,
+      lines: {
+        create: [
+          {
+            sortOrder: 0,
+            description: "Jig fixture set, carbon-fiber nylon (design + print)",
+            quantity: 5,
+            unitPriceCents: 17900,
+            totalCents: 89500,
+          },
+        ],
+      },
+    },
+  });
+
   await prisma.mileageLog.create({
     data: {
       date: new Date(2026, 7, 2, 12),

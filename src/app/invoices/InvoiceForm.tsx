@@ -21,15 +21,19 @@ export default function InvoiceForm({
   submitLabel,
   customers,
   defaults = {},
+  kind = "INVOICE",
 }: {
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
   customers: { id: string; name: string; company: string | null }[];
   defaults?: Defaults;
+  kind?: "INVOICE" | "QUOTE";
 }) {
+  const isQuote = kind === "QUOTE";
   return (
     <form action={action} className="space-y-4">
       {defaults.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
+      <input type="hidden" name="kind" value={kind} />
 
       <div>
         <label className={labelCls} htmlFor="customerId">
@@ -85,7 +89,7 @@ export default function InvoiceForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelCls} htmlFor="issueDate">
-            Invoice date *
+            {isQuote ? "Quote date *" : "Invoice date *"}
           </label>
           <input
             id="issueDate"
@@ -98,7 +102,7 @@ export default function InvoiceForm({
         </div>
         <div>
           <label className={labelCls} htmlFor="dueDate">
-            Due date
+            {isQuote ? "Valid until" : "Due date"}
           </label>
           <input
             id="dueDate"

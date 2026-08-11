@@ -259,9 +259,36 @@ export default async function TaxCenterPage({
         )}
       </Card>
 
+      <Card className="mb-4">
+        <h2 className="mb-1 font-semibold text-stone-900">Accountant package — {taxYear}</h2>
+        <p className="mb-2 text-xs text-stone-500">
+          CSV downloads that open straight in Excel. Hand these to your tax preparer.
+        </p>
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          {(
+            [
+              ["expenses", "Expenses"],
+              ["income", "Income"],
+              ["pnl", "Profit & Loss"],
+              ["category-totals", "Category totals"],
+              ["mileage", "Mileage log"],
+              ["assets", "Asset register"],
+            ] as const
+          ).map(([report, label]) => (
+            <a
+              key={report}
+              href={`/api/export/csv/${report}?year=${taxYear}`}
+              className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-center font-medium text-stone-700 active:bg-stone-100"
+            >
+              ⬇ {label}
+            </a>
+          ))}
+        </div>
+      </Card>
+
       <p className="text-center text-xs text-stone-400">
-        Accountant package (P&L, mileage, receipt ZIP) lands in V2 — today&apos;s export is a full
-        JSON backup.
+        Full JSON backup lives under More → Download backup. A ZIP bundle including receipt
+        images is planned.
       </p>
     </div>
   );

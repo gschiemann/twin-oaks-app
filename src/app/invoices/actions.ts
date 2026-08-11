@@ -79,28 +79,81 @@ async function invoiceCoreFromForm(formData: FormData) {
   };
 }
 
-async function nextInvoiceNumber(): Promise<string> {
-  const count = await prisma.invoice.count();
+async function nextInvoiceNumber(kind: string): Promise<string> {
+  const prefix = kind === "QUOTE" ? "Q" : "INV";
+  const count = await prisma.invoice.count({ where: { kind } });
   for (let n = count + 1; n < count + 50; n++) {
-    const number = `INV-${String(n).padStart(3, "0")}`;
+    const number = `${prefix}-${String(n).padStart(3, "0")}`;
     const exists = await prisma.invoice.findUnique({ where: { number } });
     if (!exists) return number;
   }
-  return `INV-${Date.now()}`;
+  return `${prefix}-${Date.now()}`;
 }
 
 export async function createInvoice(formData: FormData) {
+  const kind = str(formData.get("kind")) === "QUOTE" ? "QUOTE" : "INVOICE";
   const parsed = await invoiceCoreFromForm(formData);
-  if (!parsed) redirect("/invoices/new?error=missing");
+  if (!parsed) redirect(`/invoices/new?error=missing${kind === "QUOTE" ? "&kind=QUOTE" : ""}`);
 
-  const number = await nextInvoiceNumber();
+  const number = await nextInvoiceNumber(kind);
   const invoice = await prisma.invoice.create({
     data: {
       number,
+      kind,
       ...parsed.core,
       lines: { create: parsed.lines },
     },
   });
+  redirect(`/invoices/${invoice.id}`);
+}
+
+// Quote → invoice: fresh invoice (new INV number, draft) with the quote's
+// content; the quote is stamped as accepted and stays as history.
+export async function convertQuote(formData: FormData) {
+  const id = str(formData.get("id"));
+  if (!id) redirect("/invoices");
+
+  const quote = await prisma.invoice.findUnique({
+    where: { id },
+    include: { lines: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (!quote || quote.kind !== "QUOTE") redirect("/invoices");
+  if (quote.status === "CANCELLED" || quote.convertedToInvoiceId) {
+    redirect(`/invoices/${id}`);
+  }
+
+  const today = new Date();
+  const invoice = await prisma.invoice.create({
+    data: {
+      number: await nextInvoiceNumber("INVOICE"),
+      kind: "INVOICE",
+      customerId: quote.customerId,
+      division: quote.division,
+      status: "DRAFT",
+      issueDate: today,
+      taxYear: today.getFullYear(),
+      terms: quote.terms,
+      notes: quote.notes,
+      subtotalCents: quote.subtotalCents,
+      salesTaxCents: quote.salesTaxCents,
+      totalCents: quote.totalCents,
+      lines: {
+        create: quote.lines.map((l, i) => ({
+          sortOrder: i,
+          description: l.description,
+          quantity: l.quantity,
+          unitPriceCents: l.unitPriceCents,
+          totalCents: l.totalCents,
+        })),
+      },
+    },
+  });
+
+  await prisma.invoice.update({
+    where: { id },
+    data: { convertedToInvoiceId: invoice.id, status: "SENT" },
+  });
+
   redirect(`/invoices/${invoice.id}`);
 }
 
@@ -172,6 +225,7 @@ export async function recordPayment(formData: FormData) {
     include: { customer: true },
   });
   if (!invoice) redirect("/invoices");
+  if (invoice.kind !== "INVOICE") redirect(`/invoices/${invoiceId}?error=quote`);
   if (invoice.status === "CANCELLED") redirect(`/invoices/${invoiceId}?error=cancelled`);
 
   const amountCents = parseDollarsToCents(formData.get("amount"));

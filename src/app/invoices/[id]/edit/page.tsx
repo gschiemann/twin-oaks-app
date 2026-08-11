@@ -32,6 +32,7 @@ export default async function EditInvoicePage({
           action={updateInvoice}
           submitLabel="Save changes"
           customers={customers}
+          kind={invoice.kind === "QUOTE" ? "QUOTE" : "INVOICE"}
           defaults={{
             id: invoice.id,
             customerId: invoice.customerId,

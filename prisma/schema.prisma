@@ -150,7 +150,12 @@ model Customer {
 
 model Invoice {
   id            String        @id @default(cuid())
-  number        String        @unique // "INV-001"
+  number        String        @unique // "INV-001" / "Q-001"
+  // QUOTE | INVOICE — quotes share the whole machinery (lines, print view)
+  // but take no payments; converting a quote creates a fresh invoice and
+  // stamps convertedToInvoiceId here (derived status: ACCEPTED).
+  kind          String        @default("INVOICE")
+  convertedToInvoiceId String?
   customerId    String
   customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
   division      String // FARM | TECH | SHARED

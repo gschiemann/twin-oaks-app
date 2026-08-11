@@ -12,8 +12,17 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function InvoicesPage() {
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ kind?: string }>;
+}) {
+  const { kind: kindParam } = await searchParams;
+  const kind = kindParam === "QUOTE" ? "QUOTE" : "INVOICE";
+  const isQuotes = kind === "QUOTE";
+
   const invoices = await prisma.invoice.findMany({
+    where: { kind },
     orderBy: { createdAt: "desc" },
     include: { customer: true, payments: { select: { amountCents: true } } },
   });
@@ -30,35 +39,68 @@ export default async function InvoicesPage() {
 
   return (
     <div>
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        <Link
+          href="/invoices"
+          className={
+            !isQuotes
+              ? "rounded-xl bg-oak-700 px-4 py-2 text-center font-semibold text-white"
+              : "rounded-xl border border-stone-300 bg-white px-4 py-2 text-center font-medium text-stone-600"
+          }
+        >
+          Invoices
+        </Link>
+        <Link
+          href="/invoices?kind=QUOTE"
+          className={
+            isQuotes
+              ? "rounded-xl bg-oak-700 px-4 py-2 text-center font-semibold text-white"
+              : "rounded-xl border border-stone-300 bg-white px-4 py-2 text-center font-medium text-stone-600"
+          }
+        >
+          Quotes
+        </Link>
+      </div>
+
       <PageHeader
-        title="Invoices"
-        sub="Bill it, send it, get paid — payments land in your books automatically."
+        title={isQuotes ? "Quotes" : "Invoices"}
+        sub={
+          isQuotes
+            ? "Price it first — one tap turns a yes into an invoice."
+            : "Bill it, send it, get paid — payments land in your books automatically."
+        }
         action={
-          <Link href="/invoices/new" className={btnPrimaryCls}>
+          <Link href={isQuotes ? "/invoices/new?kind=QUOTE" : "/invoices/new"} className={btnPrimaryCls}>
             New
           </Link>
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-2">
-        <StatCard
-          label="Awaiting payment"
-          value={String(awaiting)}
-          sub={awaiting === 1 ? "invoice" : "invoices"}
-        />
-        <StatCard
-          label="Outstanding"
-          value={formatCents(outstanding)}
-          tone={outstanding > 0 ? "red" : "stone"}
-        />
-      </div>
+      {!isQuotes ? (
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <StatCard
+            label="Awaiting payment"
+            value={String(awaiting)}
+            sub={awaiting === 1 ? "invoice" : "invoices"}
+          />
+          <StatCard
+            label="Outstanding"
+            value={formatCents(outstanding)}
+            tone={outstanding > 0 ? "red" : "stone"}
+          />
+        </div>
+      ) : null}
 
       {invoices.length === 0 ? (
         <EmptyState
-          title="No invoices yet."
-          hint="Create your first invoice — add a customer, list what they owe, and mark payments as they come in."
-          actionHref="/invoices/new"
-          actionLabel="New invoice"
+          title={isQuotes ? "No quotes yet." : "No invoices yet."}
+          hint={
+            isQuotes
+              ? "Price a job before committing — when the customer says yes, one tap converts it to an invoice."
+              : "Create your first invoice — add a customer, list what they owe, and mark payments as they come in."
+          }
+          actionHref={isQuotes ? "/invoices/new?kind=QUOTE" : "/invoices/new"}
+          actionLabel={isQuotes ? "New quote" : "New invoice"}
         />
       ) : (
         <div className="space-y-2">
@@ -84,7 +126,7 @@ export default async function InvoicesPage() {
                       <div className="font-bold tabular-nums text-stone-900">
                         {formatCents(i.totalCents)}
                       </div>
-                      {balance > 0 && st !== "DRAFT" && st !== "CANCELLED" ? (
+                      {!isQuotes && balance > 0 && st !== "DRAFT" && st !== "CANCELLED" ? (
                         <div className="text-xs tabular-nums text-red-600">
                           {formatCents(balance)} due
                         </div>

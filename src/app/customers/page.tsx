@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { formatCents } from "@/lib/money";
 import { Card, EmptyState, PageHeader, btnPrimaryCls } from "@/components/ui";
 import { ChevronRightIcon } from "@/components/Icons";
-import { deriveInvoiceStatus, paidCentsOf } from "../invoices/invoice-bits";
+import { outstandingCentsOf, paidCentsOf } from "../invoices/invoice-bits";
 
 export const dynamic = "force-dynamic";
 
@@ -37,12 +37,10 @@ export default async function CustomersPage() {
           {customers.map((c) => {
             const active = c.invoices.filter((i) => i.status !== "CANCELLED");
             const revenue = active.reduce((s, i) => s + paidCentsOf(i.payments), 0);
-            const outstanding = active.reduce((s, i) => {
-              const st = deriveInvoiceStatus(i, paidCentsOf(i.payments));
-              return st === "DRAFT" || st === "CANCELLED"
-                ? s
-                : s + Math.max(0, i.totalCents - paidCentsOf(i.payments));
-            }, 0);
+            const outstanding = active.reduce(
+              (s, i) => s + outstandingCentsOf(i, paidCentsOf(i.payments)),
+              0,
+            );
             return (
               <Link key={c.id} href={`/customers/${c.id}`} className="block">
                 <Card className="flex items-center gap-3 active:bg-stone-50">

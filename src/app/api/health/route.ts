@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   return Response.json({
     app: "twin-oaks-os",
-    phase: "v2-standalone",
+    phase: "v2-complete",
     time: new Date().toISOString(),
   });
 }

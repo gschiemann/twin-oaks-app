@@ -8,6 +8,7 @@ import {
   INVOICE_STATUS_LABELS,
   deriveInvoiceStatus,
   invoiceStatusTone,
+  outstandingCentsOf,
   paidCentsOf,
 } from "../../invoices/invoice-bits";
 import { deleteCustomer } from "../actions";
@@ -46,12 +47,10 @@ export default async function CustomerDetailPage({
 
   const active = customer.invoices.filter((i) => i.status !== "CANCELLED");
   const revenue = active.reduce((s, i) => s + paidCentsOf(i.payments), 0);
-  const outstanding = active.reduce((s, i) => {
-    const st = deriveInvoiceStatus(i, paidCentsOf(i.payments));
-    return st === "DRAFT" || st === "CANCELLED"
-      ? s
-      : s + Math.max(0, i.totalCents - paidCentsOf(i.payments));
-  }, 0);
+  const outstanding = active.reduce(
+    (s, i) => s + outstandingCentsOf(i, paidCentsOf(i.payments)),
+    0,
+  );
 
   return (
     <div>

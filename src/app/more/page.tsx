@@ -4,6 +4,7 @@ import { ChevronRightIcon } from "@/components/Icons";
 
 const links = [
   { href: "/invoices", label: "Invoices", desc: "Bill customers and track what's owed" },
+  { href: "/invoices?kind=QUOTE", label: "Quotes", desc: "Price a job first — convert to an invoice on yes" },
   { href: "/customers", label: "Customers", desc: "Profiles, revenue, and open balances" },
   { href: "/mileage", label: "Mileage", desc: "Business trips logged for tax time" },
   { href: "/assets", label: "Equipment & assets", desc: "Tractors, printers, trailers — profiles and maintenance" },

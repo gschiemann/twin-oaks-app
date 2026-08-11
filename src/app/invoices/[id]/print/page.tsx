@@ -27,6 +27,7 @@ export default async function InvoicePrintPage({
   const status = deriveInvoiceStatus(invoice, paid);
   const balance = Math.max(0, invoice.totalCents - paid);
   const hasPayments = invoice.payments.length > 0;
+  const isQuote = invoice.kind === "QUOTE";
   const { customer } = invoice;
 
   return (
@@ -49,12 +50,14 @@ export default async function InvoicePrintPage({
           </div>
           <div className="shrink-0 text-right">
             <div className="text-xs font-semibold uppercase tracking-widest text-stone-500">
-              INVOICE
+              {isQuote ? "QUOTE" : "INVOICE"}
             </div>
             <div className="text-lg font-bold text-stone-900">{invoice.number}</div>
             <div className="mt-1 text-sm text-stone-600">Issued {formatDate(invoice.issueDate)}</div>
             {invoice.dueDate ? (
-              <div className="text-sm text-stone-600">Due {formatDate(invoice.dueDate)}</div>
+              <div className="text-sm text-stone-600">
+                {isQuote ? "Valid until" : "Due"} {formatDate(invoice.dueDate)}
+              </div>
             ) : null}
           </div>
         </div>
@@ -62,7 +65,7 @@ export default async function InvoicePrintPage({
         {/* Bill to */}
         <div className="mt-8">
           <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-            Bill to
+            {isQuote ? "Prepared for" : "Bill to"}
           </div>
           <div className="mt-1 font-bold text-stone-900">{customer.name}</div>
           {customer.company ? (
