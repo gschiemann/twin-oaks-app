@@ -27,16 +27,24 @@ _Last updated: 2026-08-10 (initial scaffold)._
 ### V1 gaps / conscious deferrals
 
 - **OCR auto-read of receipts** (SPEC §3 "attempt to automatically read") — deferred; fields are quick manual entry for now. Candidate: on-device/web OCR or AI extraction in a later pass.
-- **Auth / secure login** (SPEC §32) — the scaffold has no login yet. **Do not deploy publicly until auth lands.** Runs locally / on a private network in the meantime.
+- **Auth / secure login** (SPEC §32) — ✅ basic owner password gate shipped 2026-08-10 (`APP_PASSWORD` + signed 30-day session cookie, middleware-enforced on every route incl. APIs). Passkeys/Face ID still to come. **Set `APP_PASSWORD` on every deployment.**
 - **Duplicate-receipt detection** (SPEC §4) — deferred.
 - **Photos/manuals on equipment profiles** (SPEC §9) — document storage generalization comes with §31.
 - **Outstanding invoices / upcoming bills on dashboard** — arrives with V2 invoicing.
 
 ## V2 — Customers, invoicing, mileage, banking (SPEC §34)
 
-⬜ Customers · ⬜ Quotes · ⬜ Invoices · ⬜ Payments · ⬜ Mileage ·
-⬜ Bank transaction matching · ⬜ Better tax reports · ⬜ Accountant export
-(CSV/PDF/ZIP package, SPEC §28)
+_Revenue-loop slice shipped 2026-08-11:_
+
+| Feature | Status | Notes |
+|---|---|---|
+| Customers | ✅ | Profiles (SPEC §14 contact fields), lifetime revenue + open balance rollups; deletable only when invoice-free |
+| Invoices | ✅ | Draft → sent lifecycle, line-item editor, auto numbering (INV-NNN), sales tax, derived paid/partial/overdue status, printable/PDF view; drafts editable, sent invoices immutable |
+| Payments | ✅ | Recorded against invoices; **auto-posts a linked Income row** (division-appropriate SPEC §25 category) so the books need no double entry; removing a payment removes its income row |
+| Mileage | ✅ | SPEC §19 trips (odometer or direct miles), vehicle link advances Asset.currentMileage, YTD totals, Tax Center line. No auto-deduction math — rate is the accountant's call |
+| Quotes | ⬜ | Planned: invoice `kind` variant with convert-to-invoice |
+| Bank transaction matching | ⬜ | |
+| Better tax reports / accountant export (CSV/PDF/ZIP, SPEC §28) | ⬜ | JSON backup exists today |
 
 ## V3 — Farm / livestock (SPEC §35)
 
@@ -50,7 +58,9 @@ _Last updated: 2026-08-10 (initial scaffold)._
 
 ## Platform follow-ups (not feature work)
 
-- Auth (single-owner login + Face ID via passkeys/WebAuthn) — **prerequisite for any public deploy**
-- Postgres (Supabase) + object storage for production; PWA manifest + icons for
-  home-screen install; automatic backups; deploy target (Vercel)
+- Auth: password gate ✅ (2026-08-10); Face ID via passkeys/WebAuthn still open
+- Deploy readiness ✅ (2026-08-10): Postgres provider, Vercel Blob storage
+  driver with local-disk dev fallback. Remaining: actual Vercel project +
+  database provisioning (needs a Vercel token), private (non-public-URL) blob
+  storage, PWA manifest + icons, automatic backups
 - Upgrade path: Next.js 15 → 16 when the app stabilizes

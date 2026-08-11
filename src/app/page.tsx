@@ -4,6 +4,7 @@ import { formatCents } from "@/lib/money";
 import { formatDate, startOfMonth, startOfYear } from "@/lib/dates";
 import { Card, Chip, PageHeader, StatCard, divisionTone } from "@/components/ui";
 import { DIVISION_LABELS, type Division } from "@/lib/domain";
+import { ensureSchema } from "@/lib/ensure-schema";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,35 @@ async function sums(model: "expense" | "income", gte: Date, division?: string) {
 }
 
 export default async function DashboardPage() {
+  const db = await ensureSchema();
+  if (!db.ok) {
+    return (
+      <div>
+        <PageHeader title="Twin Oaks Farm & Tech" />
+        <Card className="border-amber-300 bg-amber-50">
+          <h2 className="mb-1 font-semibold text-amber-900">
+            Database isn&apos;t ready yet
+          </h2>
+          <p className="mb-2 text-sm text-amber-900">{db.reason}</p>
+          {db.detail ? (
+            <p className="mb-2 rounded-lg bg-white/60 p-2 font-mono text-xs text-amber-950">
+              {db.detail}
+            </p>
+          ) : null}
+          <p className="mb-1 text-xs text-amber-800">
+            Database-related settings this deployment can see:{" "}
+            {db.envNames.length > 0 ? db.envNames.join(", ") : "none"}
+          </p>
+          <p className="text-xs text-amber-800">
+            Fix: in Vercel, open the twin-oaks project → Storage → make sure the
+            Neon database is connected with env prefix DATABASE — then reload
+            this page. It sets itself up automatically.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   const monthStart = startOfMonth();
   const yearStart = startOfYear();
 
@@ -34,6 +64,7 @@ export default async function DashboardPage() {
     missingReceiptCount,
     recentExpenses,
     recentIncome,
+    openInvoices,
   ] = await Promise.all([
     sums("expense", monthStart),
     sums("income", monthStart),
@@ -48,7 +79,19 @@ export default async function DashboardPage() {
     prisma.expense.count({ where: { receipts: { none: {} } } }),
     prisma.expense.findMany({ orderBy: { date: "desc" }, take: 5 }),
     prisma.income.findMany({ orderBy: { date: "desc" }, take: 3 }),
+    prisma.invoice.findMany({
+      where: { status: "SENT" },
+      include: { payments: { select: { amountCents: true } } },
+    }),
   ]);
+
+  const outstandingCents = openInvoices.reduce(
+    (s, i) => s + Math.max(0, i.totalCents - i.payments.reduce((p, x) => p + x.amountCents, 0)),
+    0,
+  );
+  const awaitingCount = openInvoices.filter(
+    (i) => i.totalCents - i.payments.reduce((p, x) => p + x.amountCents, 0) > 0,
+  ).length;
 
   const netMonth = incMonth - expMonth;
   const netYtd = incYtd - expYtd;
@@ -107,6 +150,22 @@ export default async function DashboardPage() {
           </span>
         </div>
       </Card>
+
+      {awaitingCount > 0 ? (
+        <Link href="/invoices" className="mb-4 block">
+          <Card className="flex items-center justify-between active:bg-stone-50">
+            <div>
+              <p className="text-sm font-medium text-stone-700">
+                💸 {awaitingCount} invoice{awaitingCount === 1 ? "" : "s"} awaiting payment
+              </p>
+              <p className="text-xs text-stone-500">Tap to see who owes what.</p>
+            </div>
+            <span className="text-xl font-bold tabular-nums text-red-700">
+              {formatCents(outstandingCents)}
+            </span>
+          </Card>
+        </Link>
+      ) : null}
 
       <div className="mb-4 grid grid-cols-2 gap-2">
         <Card>
@@ -225,7 +284,7 @@ export default async function DashboardPage() {
       </Card>
 
       <p className="mt-6 text-center text-xs text-stone-400">
-        V1 — financial core. Next up: invoices & customers (V2), sheep (V3), print jobs (V4).
+        V2 — invoicing & mileage live. Next: sheep (V3), print jobs (V4).
       </p>
     </div>
   );
