@@ -3,78 +3,170 @@ import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { Card, PageHeader, inputCls } from "@/components/ui";
+import { classifyTerm, type SearchTerm } from "./search-terms";
 
 export const dynamic = "force-dynamic";
 
+// Every model this page searches: which columns a text term may hit, which
+// money columns an amount term may equal, and the one date column a date term
+// filters on. A model with no money column (Mileage — miles are not money) or
+// no date column (Customer) leaves the slot empty; see NO_MATCH below.
+type SearchableFields = {
+  text: readonly string[];
+  money: readonly string[];
+  date: string | null;
+};
+
+// Ids are cuids, so `id: ""` matches no row. This is how a model that CANNOT
+// satisfy a term drops out of the results entirely: a term is never silently
+// ignored, otherwise searching "$87.42" would list every asset.
+const NO_MATCH = { id: "" };
+
 // SPEC §29: "Tractor #1 hydraulic 2026" should find every relevant expense,
 // service record, and receipt. Every word must match somewhere in the record
-// (AND across terms, OR across fields).
+// (AND across terms, OR across fields) — and a word that reads as a dollar
+// amount ("87.42", "$87") or a date ("8/9/2026") searches those columns
+// instead of the text ones.
+function whereFor(terms: SearchTerm[], fields: SearchableFields) {
+  return {
+    AND: terms.map((term) => {
+      if (term.kind === "money") {
+        return fields.money.length > 0
+          ? { OR: fields.money.map((f) => ({ [f]: term.cents })) }
+          : NO_MATCH;
+      }
+      if (term.kind === "date") {
+        return fields.date ? { [fields.date]: term.range } : NO_MATCH;
+      }
+      return { OR: fields.text.map((f) => ({ [f]: { contains: term.raw } })) };
+    }),
+  };
+}
+
+const EXPENSE_FIELDS: SearchableFields = {
+  text: [
+    "description",
+    "vendorName",
+    "accountingCategory",
+    "managementCategory",
+    "businessPurpose",
+    "notes",
+  ],
+  money: ["amountCents", "salesTaxCents"],
+  date: "date",
+};
+
+const RECEIPT_FIELDS: SearchableFields = {
+  text: ["vendorName", "notes", "receiptNumber", "fileName"],
+  money: ["totalCents", "salesTaxCents"],
+  date: "receiptDate",
+};
+
+const ASSET_FIELDS: SearchableFields = {
+  text: ["name", "manufacturer", "model", "serialNumber", "assetTag", "notes"],
+  money: ["purchasePriceCents"],
+  date: "purchaseDate",
+};
+
+const INCOME_FIELDS: SearchableFields = {
+  text: ["description", "source", "category", "notes"],
+  money: ["amountCents"],
+  date: "date",
+};
+
+const MAINTENANCE_FIELDS: SearchableFields = {
+  text: ["description", "category", "vendorName", "notes"],
+  money: ["partsCostCents", "laborCostCents"],
+  date: "date",
+};
+
+const CUSTOMER_FIELDS: SearchableFields = {
+  text: ["name", "company", "email", "phone", "notes"],
+  money: [],
+  date: null,
+};
+
+const INVOICE_FIELDS: SearchableFields = {
+  text: ["number", "notes", "terms"],
+  money: ["totalCents"],
+  date: "issueDate",
+};
+
+const MILEAGE_FIELDS: SearchableFields = {
+  text: ["destination", "startLocation", "purpose", "customerName", "notes"],
+  money: [], // miles are not money
+  date: "date",
+};
+
+// "text “hydraulic” · amount $87.42 · date Aug 9, 2026" — only the parts present.
+function describeTerms(terms: SearchTerm[]): string {
+  const texts = terms.flatMap((t) => (t.kind === "text" ? [`“${t.raw}”`] : []));
+  const amounts = terms.flatMap((t) => (t.kind === "money" ? [formatCents(t.cents)] : []));
+  const dates = terms.flatMap((t) => (t.kind === "date" ? [formatDate(t.range.gte)] : []));
+
+  const parts: string[] = [];
+  if (texts.length > 0) parts.push(`text ${texts.join(", ")}`);
+  if (amounts.length > 0) parts.push(`amount ${amounts.join(", ")}`);
+  if (dates.length > 0) parts.push(`date ${dates.join(", ")}`);
+  return parts.join(" · ");
+}
+
 export default async function SearchPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q } = await searchParams;
-  const terms = (q ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 6);
-
-  const textAnd = (fields: string[]) =>
-    terms.map((t) => ({
-      OR: fields.map((f) => ({ [f]: { contains: t } })),
-    }));
+  const now = new Date();
+  const terms = (q ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .map((word) => classifyTerm(word, now));
 
   const [expenses, receipts, assets, incomes, maintenance, customers, invoices, trips] =
     terms.length === 0
       ? [[], [], [], [], [], [], [], []]
       : await Promise.all([
           prisma.expense.findMany({
-            where: {
-              AND: textAnd([
-                "description",
-                "vendorName",
-                "accountingCategory",
-                "managementCategory",
-                "businessPurpose",
-                "notes",
-              ]),
-            },
+            where: whereFor(terms, EXPENSE_FIELDS),
             take: 25,
             orderBy: { date: "desc" },
           }),
           prisma.receipt.findMany({
-            where: { AND: textAnd(["vendorName", "notes", "receiptNumber", "fileName"]) },
+            where: whereFor(terms, RECEIPT_FIELDS),
             take: 25,
             orderBy: { createdAt: "desc" },
           }),
           prisma.asset.findMany({
-            where: {
-              AND: textAnd(["name", "manufacturer", "model", "serialNumber", "assetTag", "notes"]),
-            },
+            where: whereFor(terms, ASSET_FIELDS),
             take: 25,
           }),
           prisma.income.findMany({
-            where: { AND: textAnd(["description", "source", "category", "notes"]) },
+            where: whereFor(terms, INCOME_FIELDS),
             take: 25,
             orderBy: { date: "desc" },
           }),
           prisma.maintenanceRecord.findMany({
-            where: { AND: textAnd(["description", "category", "vendorName", "notes"]) },
+            where: whereFor(terms, MAINTENANCE_FIELDS),
             include: { asset: { select: { id: true, name: true } } },
             take: 25,
             orderBy: { date: "desc" },
           }),
           prisma.customer.findMany({
-            where: { AND: textAnd(["name", "company", "email", "phone", "notes"]) },
+            where: whereFor(terms, CUSTOMER_FIELDS),
             take: 25,
             orderBy: { name: "asc" },
           }),
           prisma.invoice.findMany({
-            where: { AND: textAnd(["number", "notes", "terms"]) },
+            where: whereFor(terms, INVOICE_FIELDS),
             include: { customer: { select: { name: true } } },
             take: 25,
             orderBy: { issueDate: "desc" },
           }),
           prisma.mileageLog.findMany({
-            where: { AND: textAnd(["destination", "startLocation", "purpose", "customerName", "notes"]) },
+            where: whereFor(terms, MILEAGE_FIELDS),
             take: 25,
             orderBy: { date: "desc" },
           }),
@@ -94,15 +186,20 @@ export default async function SearchPage({
     <div>
       <PageHeader title="Search" sub="Vendors, amounts, equipment, categories — everything." />
 
-      <form action="/search" method="GET" className="mb-4">
-        <input
-          name="q"
-          defaultValue={q ?? ""}
-          placeholder={'Try "Tractor #1 hydraulic"'}
-          className={inputCls}
-          autoFocus
-        />
-      </form>
+      <div className="mb-4">
+        <form action="/search" method="GET">
+          <input
+            name="q"
+            defaultValue={q ?? ""}
+            placeholder={'Try "Tractor #1 hydraulic" or "87.42"'}
+            className={inputCls}
+            autoFocus
+          />
+        </form>
+        {terms.length > 0 ? (
+          <p className="mt-1.5 text-xs text-stone-500">Matching: {describeTerms(terms)}</p>
+        ) : null}
+      </div>
 
       {terms.length === 0 ? (
         <p className="text-center text-sm text-stone-500">

@@ -51,6 +51,12 @@ feature work.
   session cookie; unset disables the gate for dev. The session module is
   Edge-safe (Web Crypto only) — no Node imports there. Always set
   `APP_PASSWORD` in production.
+  **Passkeys are additive, never a replacement** (`src/lib/passkey.ts`,
+  `/api/passkeys/*`): the password must always keep working or a wiped phone
+  locks the owner out of their own books. Enrollment stays behind the gate;
+  only `api/passkeys/auth` is public, because that is how a session is
+  obtained. Every middleware exemption is justified inline — read that
+  comment before adding another.
 - **All DB-backed pages export `dynamic = "force-dynamic"`** — this app is
   per-request data; static generation would query the DB at build time.
 - **Page files export only Next-recognized fields.** Shared helpers go in

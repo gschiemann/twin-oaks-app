@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card, PageHeader } from "@/components/ui";
 import { ChevronRightIcon } from "@/components/Icons";
+import InstallHint from "@/components/InstallHint";
 
 const links = [
   { href: "/invoices", label: "Invoices", desc: "Bill customers and track what's owed" },
@@ -11,12 +12,15 @@ const links = [
   { href: "/assets", label: "Equipment & assets", desc: "Tractors, printers, trailers — profiles and maintenance" },
   { href: "/tax", label: "Tax Center", desc: "Year totals, flagged items, category breakdowns" },
   { href: "/search", label: "Search", desc: "Find any expense, receipt, or record in seconds" },
+  { href: "/settings/passkeys", label: "Face ID sign-in", desc: "Skip the password on devices you trust" },
+  { href: "/settings/backups", label: "Backups", desc: "Automatic daily copies — download any of them" },
 ] as const;
 
 export default function MorePage() {
   return (
     <div>
       <PageHeader title="More" />
+      <InstallHint />
       <Card className="divide-y divide-stone-100 p-0">
         {links.map((l) => (
           <Link key={l.href} href={l.href} className="flex items-center gap-3 px-4 py-3.5">
@@ -29,7 +33,7 @@ export default function MorePage() {
         ))}
         <a href="/api/export" className="flex items-center gap-3 px-4 py-3.5">
           <span className="min-w-0 flex-1">
-            <span className="block font-semibold text-stone-900">Download backup</span>
+            <span className="block font-semibold text-stone-900">Download backup now</span>
             <span className="block text-sm text-stone-500">
               Full JSON export of every record — keep more than one copy
             </span>

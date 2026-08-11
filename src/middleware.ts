@@ -21,8 +21,18 @@ export async function middleware(req: NextRequest) {
   return NextResponse.redirect(url);
 }
 
-// api/inbound is exempt because email providers post to it without a
-// session; it authenticates itself with a shared secret (see that route).
+// Exempt paths, and why each one has to be public:
+// • api/inbound      — email providers POST without a session; that route
+//                      authenticates itself with a shared secret.
+// • api/passkeys/auth — this is how you OBTAIN a session (Face ID sign-in);
+//                      it trusts nothing but a signature over a server-issued
+//                      challenge. Enrollment (api/passkeys/register) stays
+//                      gated, so new keys can only be added while signed in.
+// • api/cron        — Vercel's scheduler carries no session; that route
+//                      authenticates with CRON_SECRET.
+// • manifest/icons   — fetched by iOS when installing to the home screen.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|login|api/health|api/inbound).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|login|api/health|api/inbound|api/passkeys/auth|api/cron|manifest.webmanifest|icon|apple-icon).*)",
+  ],
 };

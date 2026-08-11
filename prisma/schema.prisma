@@ -136,6 +136,20 @@ model Asset {
   @@index([division])
 }
 
+// Face ID / Touch ID sign-in (SPEC §32). A passkey is an ADDITIVE second
+// way in — the owner password always keeps working, so a lost or wiped
+// device can never lock the owner out of their own books.
+model Passkey {
+  id           String   @id @default(cuid())
+  credentialId String   @unique // base64url
+  publicKey    String // base64url COSE key
+  counter      Int      @default(0)
+  transports   String? // comma-separated hints from the authenticator
+  label        String // "Greg's iPhone"
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+}
+
 // ————— V2: the revenue loop (SPEC §§14–17) + mileage (§19) —————
 
 model Customer {

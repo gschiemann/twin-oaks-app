@@ -57,11 +57,20 @@ _Revenue-loop slice shipped 2026-08-11:_
 ⬜ Print jobs · ⬜ Filament inventory · ⬜ Printer tracking · ⬜ Job costing ·
 ⬜ Production reporting · ⬜ Profit per part
 
+## Production hardening — shipped 2026-08-11
+
+| Item | Status | Notes |
+|---|---|---|
+| Face ID / Touch ID sign-in (SPEC §32) | ✅ | WebAuthn passkeys, **additive** — the owner password always works, so a lost device can't lock the owner out. Enrollment requires an existing session; sign-in verifies a signature over a server-issued challenge (challenge in a 5-min httpOnly cookie, since serverless instances share no memory). Managed at Settings → Face ID sign-in. Verified end-to-end with a virtual authenticator (enroll → sign in → last-used → remove → fallback) |
+| Home-screen install (PWA) | ✅ | `manifest.ts` + generated `icon`/`apple-icon` (ImageResponse, no binary assets), standalone display, dismissible install hint on More |
+| Private document serving | ✅ | Blob URLs are no longer emitted to the browser; every document streams through `/api/files/remote` behind the login gate, with a host allowlist so the proxy can't be an SSRF relay. All stored files served under CSP `sandbox` + `nosniff` |
+| Automatic daily backups (SPEC §32) | ✅ | Vercel cron → `/api/cron/backup` (CRON_SECRET-authenticated) writes a dated JSON of every table to Blob, keeps the newest 30. Browse/download/trigger at Settings → Backups |
+| Search by amount + date (SPEC §29) | ✅ | `$87.42` / `87.42` matches money columns, `8/9/2026` / `2026-08-09` matches date columns; a term a model can't satisfy excludes that model rather than being silently dropped |
+
 ## Platform follow-ups (not feature work)
 
-- Auth: password gate ✅ (2026-08-10); Face ID via passkeys/WebAuthn still open
-- Deploy readiness ✅ (2026-08-10): Postgres provider, Vercel Blob storage
-  driver with local-disk dev fallback. Remaining: actual Vercel project +
-  database provisioning (needs a Vercel token), private (non-public-URL) blob
-  storage, PWA manifest + icons, automatic backups
+- Auth ✅ password gate + passkeys. Remaining: nothing blocking
+- Deploy ✅ live at twin-oaks.vercel.app from `gschiemann/twin-oaks-app`
+- Remaining: ZIP export bundling receipt images (SPEC §28), bank-statement
+  matching (needs a sample CSV), V3 livestock, V4 print jobs
 - Upgrade path: Next.js 15 → 16 when the app stabilizes

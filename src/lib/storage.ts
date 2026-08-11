@@ -69,8 +69,31 @@ export async function saveUpload(file: File): Promise<StoredFile> {
 }
 
 // Resolve a stored key to something an <img src> / link can use.
+//
+// Blob-backed documents are deliberately NOT linked directly: their public
+// URL would end up in browser history, screenshots and share sheets, and
+// anyone holding it could read a financial document without signing in.
+// Everything is routed through /api/files instead, which sits behind the
+// login gate and fetches the blob server-side.
 export function fileSrc(storageKey: string): string {
-  return storageKey.startsWith("http") ? storageKey : `/api/files/${storageKey}`;
+  return storageKey.startsWith("http")
+    ? `/api/files/remote?k=${encodeURIComponent(storageKey)}`
+    : `/api/files/${storageKey}`;
+}
+
+// Only our own blob store may be proxied — without this check the proxy
+// would be an open SSRF relay.
+export function isOwnBlobUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname.endsWith(".public.blob.vercel-storage.com") ||
+        url.hostname.endsWith(".blob.vercel-storage.com"))
+    );
+  } catch {
+    return false;
+  }
 }
 
 // Local-disk keys are single flat server-generated filenames; reject anything

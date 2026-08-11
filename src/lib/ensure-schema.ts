@@ -247,6 +247,20 @@ const DDL: string[] = [
   `ALTER TABLE "Receipt" ADD COLUMN IF NOT EXISTS "emailFrom" TEXT`,
   `ALTER TABLE "Receipt" ADD COLUMN IF NOT EXISTS "emailSubject" TEXT`,
 
+  // ————— V2.3: passkeys (Face ID / Touch ID sign-in) —————
+  `CREATE TABLE IF NOT EXISTS "Passkey" (
+    "id" TEXT NOT NULL,
+    "credentialId" TEXT NOT NULL,
+    "publicKey" TEXT NOT NULL,
+    "counter" INTEGER NOT NULL DEFAULT 0,
+    "transports" TEXT,
+    "label" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "lastUsedAt" TIMESTAMP(3),
+    CONSTRAINT "Passkey_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Passkey_credentialId_key" ON "Passkey"("credentialId")`,
+
   // Foreign keys have no IF NOT EXISTS — swallow duplicate_object instead.
   `DO $$ BEGIN
     ALTER TABLE "Receipt" ADD CONSTRAINT "Receipt_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -291,7 +305,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
     // Probe the NEWEST schema element (table OR column) — if an older
     // deploy's schema is present but anything newer is missing, the
     // idempotent DDL below fills the gap.
-    await prisma.$queryRawUnsafe(`SELECT "source" FROM "Receipt" LIMIT 1`);
+    await prisma.$queryRawUnsafe(`SELECT 1 FROM "Passkey" LIMIT 1`);
     return { ok: true }; // schema already present
   } catch (probeErr) {
     // Something missing (or connection issue) — attempt to apply the schema.
@@ -299,7 +313,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
       for (const stmt of DDL) {
         await prisma.$executeRawUnsafe(stmt);
       }
-      await prisma.$queryRawUnsafe(`SELECT "source" FROM "Receipt" LIMIT 1`);
+      await prisma.$queryRawUnsafe(`SELECT 1 FROM "Passkey" LIMIT 1`);
       console.log("[twin-oaks] database schema applied by self-heal");
       return { ok: true };
     } catch (healErr) {
