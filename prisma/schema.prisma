@@ -136,6 +136,45 @@ model Asset {
   @@index([division])
 }
 
+// FR-007: entered once in Settings, reused on every customer-facing
+// document. Single row (id is always "singleton").
+model BusinessProfile {
+  id                    String   @id @default("singleton")
+  name                  String   @default("Twin Oaks Farm & Tech")
+  addressLine1          String?
+  addressLine2          String?
+  city                  String?
+  state                 String?
+  postalCode            String?
+  phone                 String?
+  email                 String?
+  website               String?
+  logoPath              String? // storage key, same pipeline as receipts
+  // BUG-001: the house sales-tax rate new invoices start from.
+  defaultTaxRatePercent Float    @default(0)
+  updatedAt             DateTime @updatedAt
+}
+
+// FR-004: issues and ideas found while using the app, numbered per kind
+// (BUG-001, FR-002, UI-003, TAX-004).
+model Ticket {
+  id             String   @id @default(cuid())
+  ref            String   @unique // "BUG-001"
+  kind           String // BUG | FR | UI | TAX
+  number         Int
+  title          String
+  description    String?
+  priority       String   @default("MEDIUM") // LOW | MEDIUM | HIGH
+  status         String   @default("NEW") // NEW | WORKING | READY_FOR_TESTING | TESTING | COMPLETE
+  devNotes       String?
+  attachmentPath String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([kind, number])
+  @@index([status])
+}
+
 // Face ID / Touch ID sign-in (SPEC §32). A passkey is an ADDITIVE second
 // way in — the owner password always keeps working, so a lost or wiped
 // device can never lock the owner out of their own books.
@@ -187,6 +226,16 @@ model Invoice {
   subtotalCents Int           @default(0)
   salesTaxCents Int           @default(0)
   totalCents    Int           @default(0)
+  // BUG-001: the rate actually applied, stored with the transaction so a
+  // later rate change never rewrites history. Null = no tax applied.
+  taxRatePercent    Float?
+  // True when the operator typed a tax amount by hand instead of letting
+  // the rate drive it (odd jurisdictions, rounding to match a paper form).
+  taxManualOverride Boolean   @default(false)
+  // FR-007: business details frozen onto the document when it is finalized,
+  // so editing Settings later cannot alter an already-issued invoice.
+  businessSnapshot  String?
+  shipToAddress     String?
   taxYear       Int
   lines         InvoiceLine[]
   payments      Payment[]
@@ -207,6 +256,9 @@ model InvoiceLine {
   quantity       Float   @default(1)
   unitPriceCents Int
   totalCents     Int
+  // BUG-001: labor/services/freight are often exempt — tax is summed over
+  // taxable lines only.
+  taxable        Boolean @default(true)
 }
 
 model Payment {

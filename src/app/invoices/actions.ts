@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { parseDateInput, taxYearOf } from "@/lib/dates";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
 import { DIVISIONS } from "@/lib/domain";
+import { computeTax } from "@/lib/tax";
+import { getBusinessProfile, snapshotBusiness } from "@/lib/business";
 import { incomeCategoryForDivision } from "./invoice-bits";
 
 function str(v: FormDataEntryValue | null): string | null {
@@ -19,6 +21,7 @@ type ParsedLine = {
   quantity: number;
   unitPriceCents: number;
   totalCents: number;
+  taxable: boolean;
 };
 
 // The lines editor posts fields named line-desc-<k>, line-qty-<k>,
@@ -44,6 +47,8 @@ function parseLines(formData: FormData): ParsedLine[] {
       quantity,
       unitPriceCents,
       totalCents: Math.round(quantity * unitPriceCents),
+      // An unchecked checkbox posts nothing at all, so absence means exempt.
+      taxable: formData.get(`line-taxable-${k}`) != null,
     });
   }
   return lines;
@@ -59,8 +64,18 @@ async function invoiceCoreFromForm(formData: FormData) {
   if (lines.length === 0) return null;
 
   const issueDate = parseDateInput(formData.get("issueDate")) ?? new Date();
-  const subtotalCents = lines.reduce((s, l) => s + l.totalCents, 0);
-  const salesTaxCents = parseDollarsToCents(formData.get("salesTax")) ?? 0;
+
+  // BUG-001: tax is derived here, never taken from a hand-typed total. The
+  // rate that was actually used is persisted with the invoice so a later
+  // Settings change cannot rewrite an issued document.
+  const rateRaw = str(formData.get("taxRatePercent"));
+  const profile = await getBusinessProfile();
+  const taxRatePercent =
+    rateRaw != null && Number.isFinite(Number(rateRaw))
+      ? Number(rateRaw)
+      : profile.defaultTaxRatePercent;
+  const manualTaxCents = parseDollarsToCents(formData.get("manualTax"));
+  const tax = computeTax(lines, taxRatePercent, manualTaxCents);
 
   return {
     core: {
@@ -71,9 +86,12 @@ async function invoiceCoreFromForm(formData: FormData) {
       dueDate: parseDateInput(formData.get("dueDate")),
       terms: str(formData.get("terms")),
       notes: str(formData.get("notes")),
-      subtotalCents,
-      salesTaxCents,
-      totalCents: subtotalCents + salesTaxCents,
+      shipToAddress: str(formData.get("shipToAddress")),
+      subtotalCents: tax.subtotalCents,
+      salesTaxCents: tax.salesTaxCents,
+      totalCents: tax.totalCents,
+      taxRatePercent: tax.manual ? null : tax.taxRatePercent,
+      taxManualOverride: tax.manual,
     },
     lines,
   };
@@ -137,6 +155,9 @@ export async function convertQuote(formData: FormData) {
       subtotalCents: quote.subtotalCents,
       salesTaxCents: quote.salesTaxCents,
       totalCents: quote.totalCents,
+      taxRatePercent: quote.taxRatePercent,
+      taxManualOverride: quote.taxManualOverride,
+      shipToAddress: quote.shipToAddress,
       lines: {
         create: quote.lines.map((l, i) => ({
           sortOrder: i,
@@ -144,6 +165,7 @@ export async function convertQuote(formData: FormData) {
           quantity: l.quantity,
           unitPriceCents: l.unitPriceCents,
           totalCents: l.totalCents,
+          taxable: l.taxable,
         })),
       },
     },
@@ -196,7 +218,14 @@ export async function setInvoiceStatus(formData: FormData) {
     (to === "CANCELLED" && !hasPayments);
 
   if (allowed) {
-    await prisma.invoice.update({ where: { id }, data: { status: to } });
+    // FR-007: issuing the document freezes the business details onto it, so
+    // editing Settings later can never alter an invoice already in a
+    // customer's hands.
+    const freeze =
+      to === "SENT" && !invoice.businessSnapshot
+        ? { businessSnapshot: snapshotBusiness(await getBusinessProfile()) }
+        : {};
+    await prisma.invoice.update({ where: { id }, data: { status: to, ...freeze } });
   }
   redirect(`/invoices/${id}`);
 }
@@ -264,7 +293,15 @@ export async function recordPayment(formData: FormData) {
 
   // First payment on a draft flips it to sent — the money is real either way.
   if (invoice.status === "DRAFT") {
-    await prisma.invoice.update({ where: { id: invoiceId }, data: { status: "SENT" } });
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        status: "SENT",
+        ...(invoice.businessSnapshot
+          ? {}
+          : { businessSnapshot: snapshotBusiness(await getBusinessProfile()) }),
+      },
+    });
   }
 
   redirect(`/invoices/${invoiceId}`);

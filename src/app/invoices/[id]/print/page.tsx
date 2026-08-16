@@ -3,6 +3,9 @@ import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import PrintButton from "@/components/PrintButton";
+import { businessAddressLines, businessFromSnapshot, getBusinessProfile } from "@/lib/business";
+import { fileSrc } from "@/lib/storage";
+import { formatRate } from "@/lib/tax";
 import { deriveInvoiceStatus, paidCentsOf } from "../../invoice-bits";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +32,9 @@ export default async function InvoicePrintPage({
   const hasPayments = invoice.payments.length > 0;
   const isQuote = invoice.kind === "QUOTE";
   const { customer } = invoice;
+  // FR-007: the frozen snapshot wins so an issued document never changes.
+  const business = businessFromSnapshot(invoice.businessSnapshot, await getBusinessProfile());
+  const addressLines = businessAddressLines(business);
 
   return (
     <div>
@@ -43,10 +49,21 @@ export default async function InvoicePrintPage({
         {/* Header */}
         <div className="flex items-start justify-between gap-6">
           <div>
-            <div className="text-xl font-bold tracking-tight text-stone-900">
-              Twin Oaks Farm &amp; Tech LLC
-            </div>
-            <div className="text-sm text-stone-500">Twin Oaks OS</div>
+            {business.logoPath ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={fileSrc(business.logoPath)} alt="" className="mb-2 h-14 w-auto" />
+            ) : null}
+            <div className="text-xl font-bold tracking-tight text-stone-900">{business.name}</div>
+            {addressLines.map((line) => (
+              <div key={line} className="text-sm text-stone-600">
+                {line}
+              </div>
+            ))}
+            {business.email || business.phone || business.website ? (
+              <div className="mt-1 text-sm text-stone-500">
+                {[business.email, business.phone, business.website].filter(Boolean).join(" · ")}
+              </div>
+            ) : null}
           </div>
           <div className="shrink-0 text-right">
             <div className="text-xs font-semibold uppercase tracking-widest text-stone-500">
@@ -126,7 +143,10 @@ export default async function InvoicePrintPage({
             </div>
             {invoice.salesTaxCents > 0 ? (
               <div className="flex justify-between text-stone-700">
-                <span>Sales tax</span>
+                <span>
+                  Sales tax
+                  {invoice.taxRatePercent ? ` (${formatRate(invoice.taxRatePercent)})` : ""}
+                </span>
                 <span className="tabular-nums">{formatCents(invoice.salesTaxCents)}</span>
               </div>
             ) : null}
@@ -171,7 +191,7 @@ export default async function InvoicePrintPage({
 
         {/* Footer */}
         <div className="mt-10 border-t border-stone-200 pt-4 text-center text-xs text-stone-400">
-          Twin Oaks Farm &amp; Tech LLC
+          {business.name}
         </div>
       </div>
     </div>

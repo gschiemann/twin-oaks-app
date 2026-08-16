@@ -12,8 +12,16 @@ type Defaults = {
   dueDate?: Date | null;
   terms?: string | null;
   notes?: string | null;
+  shipToAddress?: string | null;
   salesTaxCents?: number | null;
-  lines?: { description: string; quantity: number; unitPriceCents: number }[];
+  taxRatePercent?: number | null;
+  taxManualOverride?: boolean;
+  lines?: {
+    description: string;
+    quantity: number;
+    unitPriceCents: number;
+    taxable: boolean;
+  }[];
 };
 
 export default function InvoiceForm({
@@ -22,12 +30,14 @@ export default function InvoiceForm({
   customers,
   defaults = {},
   kind = "INVOICE",
+  defaultTaxRatePercent,
 }: {
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
   customers: { id: string; name: string; company: string | null }[];
   defaults?: Defaults;
   kind?: "INVOICE" | "QUOTE";
+  defaultTaxRatePercent: number;
 }) {
   const isQuote = kind === "QUOTE";
   return (
@@ -114,38 +124,39 @@ export default function InvoiceForm({
         </div>
       </div>
 
-      <InvoiceLinesEditor initialLines={defaults.lines} />
+      <InvoiceLinesEditor
+        initialLines={defaults.lines}
+        defaultTaxRatePercent={defaultTaxRatePercent}
+        initialTaxRatePercent={defaults.taxRatePercent}
+        initialManualTaxCents={
+          defaults.taxManualOverride ? (defaults.salesTaxCents ?? 0) : null
+        }
+      />
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={labelCls} htmlFor="salesTax">
-            Sales tax
-          </label>
-          <input
-            id="salesTax"
-            name="salesTax"
-            inputMode="decimal"
-            placeholder="$0.00"
-            defaultValue={
-              defaults.salesTaxCents != null && defaults.salesTaxCents !== 0
-                ? (defaults.salesTaxCents / 100).toFixed(2)
-                : ""
-            }
-            className={inputCls}
-          />
-        </div>
-        <div>
-          <label className={labelCls} htmlFor="terms">
-            Payment terms
-          </label>
-          <input
-            id="terms"
-            name="terms"
-            placeholder="Due in 14 days"
-            defaultValue={defaults.terms ?? ""}
-            className={inputCls}
-          />
-        </div>
+      <div>
+        <label className={labelCls} htmlFor="terms">
+          Payment terms
+        </label>
+        <input
+          id="terms"
+          name="terms"
+          placeholder="Due in 14 days"
+          defaultValue={defaults.terms ?? ""}
+          className={inputCls}
+        />
+      </div>
+
+      <div>
+        <label className={labelCls} htmlFor="shipToAddress">
+          Ship to (only if different from the customer&apos;s address)
+        </label>
+        <textarea
+          id="shipToAddress"
+          name="shipToAddress"
+          rows={2}
+          defaultValue={defaults.shipToAddress ?? ""}
+          className={inputCls}
+        />
       </div>
 
       <div>

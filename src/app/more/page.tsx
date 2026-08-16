@@ -12,6 +12,9 @@ const links = [
   { href: "/assets", label: "Equipment & assets", desc: "Tractors, printers, trailers — profiles and maintenance" },
   { href: "/tax", label: "Tax Center", desc: "Year totals, flagged items, category breakdowns" },
   { href: "/search", label: "Search", desc: "Find any expense, receipt, or record in seconds" },
+  { href: "/settings/business", label: "Business profile", desc: "Your details — used on every document" },
+  { href: "/tickets", label: "Issues & ideas", desc: "Log bugs and feature requests while you test" },
+  { href: "/settings/checklist", label: "Release checklist", desc: "Walk the workflows before calling it stable" },
   { href: "/settings/passkeys", label: "Face ID sign-in", desc: "Skip the password on devices you trust" },
   { href: "/settings/backups", label: "Backups", desc: "Automatic daily copies — download any of them" },
 ] as const;

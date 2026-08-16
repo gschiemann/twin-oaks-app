@@ -261,6 +261,47 @@ const DDL: string[] = [
 )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "Passkey_credentialId_key" ON "Passkey"("credentialId")`,
 
+  // ————— V3.0: business profile (FR-007), sales tax (BUG-001), tickets (FR-004) —————
+  `CREATE TABLE IF NOT EXISTS "BusinessProfile" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL DEFAULT 'Twin Oaks Farm & Tech',
+    "addressLine1" TEXT,
+    "addressLine2" TEXT,
+    "city" TEXT,
+    "state" TEXT,
+    "postalCode" TEXT,
+    "phone" TEXT,
+    "email" TEXT,
+    "website" TEXT,
+    "logoPath" TEXT,
+    "defaultTaxRatePercent" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "BusinessProfile_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE TABLE IF NOT EXISTS "Ticket" (
+    "id" TEXT NOT NULL,
+    "ref" TEXT NOT NULL,
+    "kind" TEXT NOT NULL,
+    "number" INTEGER NOT NULL,
+    "title" TEXT NOT NULL,
+    "description" TEXT,
+    "priority" TEXT NOT NULL DEFAULT 'MEDIUM',
+    "status" TEXT NOT NULL DEFAULT 'NEW',
+    "devNotes" TEXT,
+    "attachmentPath" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "Ticket_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Ticket_ref_key" ON "Ticket"("ref")`,
+  `CREATE INDEX IF NOT EXISTS "Ticket_kind_number_idx" ON "Ticket"("kind", "number")`,
+  `CREATE INDEX IF NOT EXISTS "Ticket_status_idx" ON "Ticket"("status")`,
+  `ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "taxRatePercent" DOUBLE PRECISION`,
+  `ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "taxManualOverride" BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "businessSnapshot" TEXT`,
+  `ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "shipToAddress" TEXT`,
+  `ALTER TABLE "InvoiceLine" ADD COLUMN IF NOT EXISTS "taxable" BOOLEAN NOT NULL DEFAULT true`,
+
   // Foreign keys have no IF NOT EXISTS — swallow duplicate_object instead.
   `DO $$ BEGIN
     ALTER TABLE "Receipt" ADD CONSTRAINT "Receipt_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -305,7 +346,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
     // Probe the NEWEST schema element (table OR column) — if an older
     // deploy's schema is present but anything newer is missing, the
     // idempotent DDL below fills the gap.
-    await prisma.$queryRawUnsafe(`SELECT 1 FROM "Passkey" LIMIT 1`);
+    await prisma.$queryRawUnsafe(`SELECT 1 FROM "Ticket" LIMIT 1`);
     return { ok: true }; // schema already present
   } catch (probeErr) {
     // Something missing (or connection issue) — attempt to apply the schema.
@@ -313,7 +354,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
       for (const stmt of DDL) {
         await prisma.$executeRawUnsafe(stmt);
       }
-      await prisma.$queryRawUnsafe(`SELECT 1 FROM "Passkey" LIMIT 1`);
+      await prisma.$queryRawUnsafe(`SELECT 1 FROM "Ticket" LIMIT 1`);
       console.log("[twin-oaks] database schema applied by self-heal");
       return { ok: true };
     } catch (healErr) {

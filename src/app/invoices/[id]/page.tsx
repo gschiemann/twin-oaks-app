@@ -20,6 +20,7 @@ import {
   invoiceStatusTone,
   paidCentsOf,
 } from "../invoice-bits";
+import { formatRate } from "@/lib/tax";
 import { convertQuote, deleteInvoice, deletePayment, recordPayment, setInvoiceStatus } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +65,7 @@ export default async function InvoiceDetailPage({
   const status = deriveInvoiceStatus(invoice, paidCents);
   const balanceCents = invoice.totalCents - paidCents;
   const isQuote = invoice.kind === "QUOTE";
+  const taxableCents = invoice.lines.reduce((s, l) => s + (l.taxable ? l.totalCents : 0), 0);
   const acceptedInvoice = invoice.convertedToInvoiceId
     ? await prisma.invoice.findUnique({
         where: { id: invoice.convertedToInvoiceId },
@@ -82,6 +84,12 @@ export default async function InvoiceDetailPage({
           </Link>
         }
       />
+
+      {!isQuote ? (
+        <Link href={`/invoices/${invoice.id}/packing`} className={`${btnSecondaryCls} mb-4 w-full`}>
+          📦 Packing list
+        </Link>
+      ) : null}
 
       {error && ERROR_MESSAGES[error] ? (
         <Card className="mb-4 border-amber-300 bg-amber-50 text-sm text-amber-900">
@@ -121,6 +129,7 @@ export default async function InvoiceDetailPage({
                 <div className="font-medium text-stone-900">{line.description}</div>
                 <div className="text-sm text-stone-500">
                   {line.quantity} × {formatCents(line.unitPriceCents)}
+                  {line.taxable ? "" : " · not taxed"}
                 </div>
               </div>
               <span className="shrink-0 text-right font-semibold tabular-nums text-stone-900">
@@ -136,9 +145,24 @@ export default async function InvoiceDetailPage({
               {formatCents(invoice.subtotalCents)}
             </span>
           </div>
+          {taxableCents !== invoice.subtotalCents ? (
+            <div className="flex justify-between">
+              <span className="text-stone-500">Taxable amount</span>
+              <span className="font-medium tabular-nums text-stone-900">
+                {formatCents(taxableCents)}
+              </span>
+            </div>
+          ) : null}
           {invoice.salesTaxCents > 0 ? (
             <div className="flex justify-between">
-              <span className="text-stone-500">Sales tax</span>
+              <span className="text-stone-500">
+                Sales tax
+                {invoice.taxManualOverride
+                  ? " (manual)"
+                  : invoice.taxRatePercent
+                    ? ` @ ${formatRate(invoice.taxRatePercent)}`
+                    : ""}
+              </span>
               <span className="font-medium tabular-nums text-stone-900">
                 {formatCents(invoice.salesTaxCents)}
               </span>
