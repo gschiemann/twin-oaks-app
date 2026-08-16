@@ -1,4 +1,5 @@
 import { btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
+import { TAX_TREATMENTS, TAX_TREATMENT_LABELS, type TaxTreatment } from "@/lib/tax";
 
 type Defaults = {
   id?: string;
@@ -8,6 +9,9 @@ type Defaults = {
   email?: string | null;
   address?: string | null;
   notes?: string | null;
+  taxTreatment?: string | null;
+  taxRatePercent?: number | null;
+  taxExemptReason?: string | null;
 };
 
 export default function CustomerForm({
@@ -91,6 +95,59 @@ export default function CustomerForm({
           defaultValue={defaults.address ?? ""}
           className={inputCls}
         />
+      </div>
+
+      <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+        <span className={labelCls}>Sales tax for this customer</span>
+        <div className="space-y-2">
+          {TAX_TREATMENTS.map((t) => (
+            <label
+              key={t}
+              className="flex cursor-pointer items-center gap-2 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-700 has-checked:border-oak-600 has-checked:bg-oak-50 has-checked:text-oak-800"
+            >
+              <input
+                type="radio"
+                name="taxTreatment"
+                value={t}
+                defaultChecked={(defaults.taxTreatment ?? "DEFAULT") === t}
+                className="accent-oak-700"
+              />
+              {TAX_TREATMENT_LABELS[t as TaxTreatment]}
+            </label>
+          ))}
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-xs text-stone-500" htmlFor="taxRatePercent">
+              Their rate %
+            </label>
+            <input
+              id="taxRatePercent"
+              name="taxRatePercent"
+              inputMode="decimal"
+              placeholder="9.5"
+              defaultValue={defaults.taxRatePercent ?? ""}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-stone-500" htmlFor="taxExemptReason">
+              Exempt reason / cert #
+            </label>
+            <input
+              id="taxExemptReason"
+              name="taxExemptReason"
+              placeholder="Resale cert #12345"
+              defaultValue={defaults.taxExemptReason ?? ""}
+              className={inputCls}
+            />
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-stone-500">
+          Set once — every invoice for this customer starts with the right treatment. Exempt
+          customers are never taxed, whatever the invoice says.
+        </p>
       </div>
 
       <div>

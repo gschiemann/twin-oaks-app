@@ -31,8 +31,11 @@ export async function middleware(req: NextRequest) {
 // • api/cron        — Vercel's scheduler carries no session; that route
 //                      authenticates with CRON_SECRET.
 // • manifest/icons   — fetched by iOS when installing to the home screen.
+// • brand/           — the logo, which the SIGN-IN page itself renders, so it
+//                      has to load before anyone is signed in. Static brand
+//                      art only; never put customer files under this path.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|login|api/health|api/inbound|api/passkeys/auth|api/cron|manifest.webmanifest|icon|apple-icon).*)",
+    "/((?!_next/static|_next/image|favicon.ico|login|brand/|api/health|api/inbound|api/passkeys/auth|api/cron|manifest.webmanifest|icon|apple-icon).*)",
   ],
 };

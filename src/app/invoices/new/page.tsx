@@ -18,7 +18,14 @@ export default async function NewInvoicePage({
   const [customers, profile] = await Promise.all([
     prisma.customer.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, company: true },
+      select: {
+        id: true,
+        name: true,
+        company: true,
+        taxTreatment: true,
+        taxRatePercent: true,
+        taxExemptReason: true,
+      },
     }),
     getBusinessProfile(),
   ]);

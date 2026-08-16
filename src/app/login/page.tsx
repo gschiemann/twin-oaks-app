@@ -26,11 +26,13 @@ export default async function LoginPage({
   return (
     <div className="mx-auto mt-16 max-w-sm">
       <div className="mb-6 text-center">
-        <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-oak-700 text-xl font-bold text-white">
-          TO
-        </span>
-        <h1 className="text-2xl font-bold text-stone-900">Twin Oaks OS</h1>
-        <p className="text-sm text-stone-500">Owner sign-in</p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/brand/twin-oaks-logo.png"
+          alt="Twin Oaks Farm & Tech"
+          className="mx-auto h-20 w-auto"
+        />
+        <p className="eyebrow mt-3">Owner sign-in</p>
       </div>
       {hasPasskey ? <PasskeySignIn /> : null}
       <Card>

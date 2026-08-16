@@ -199,6 +199,14 @@ model Customer {
   email     String?
   address   String?
   notes     String?
+  // BUG-001 follow-up: tax rules ride on the customer, so the right rate
+  // fills itself in every time you invoice them.
+  //   DEFAULT — use the Business profile's rate
+  //   RATE    — this customer's own rate (their city/county)
+  //   EXEMPT  — no tax (resale certificate, farm exemption, no nexus…)
+  taxTreatment    String   @default("DEFAULT")
+  taxRatePercent  Float?
+  taxExemptReason String?
   invoices  Invoice[]
   payments  Payment[]
   createdAt DateTime  @default(now())

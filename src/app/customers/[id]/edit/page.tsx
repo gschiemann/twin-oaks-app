@@ -19,7 +19,11 @@ export default async function EditCustomerPage({
     <div>
       <PageHeader title="Edit customer" sub={customer.name} />
       <Card>
-        <CustomerForm action={updateCustomer} submitLabel="Save changes" defaults={customer} />
+        <CustomerForm
+          action={updateCustomer}
+          submitLabel="Save changes"
+          defaults={customer}
+        />
       </Card>
     </div>
   );

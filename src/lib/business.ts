@@ -37,6 +37,10 @@ export const DEFAULT_BUSINESS: BusinessInfo = {
 
 export const PROFILE_ID = "singleton";
 
+// The printed brand lockup, shipped with the app. Documents fall back to it
+// when no custom logo has been uploaded, so invoices look right on day one.
+export const DEFAULT_LOGO_SRC = "/brand/twin-oaks-logo.png";
+
 export async function getBusinessProfile(): Promise<BusinessInfo & { defaultTaxRatePercent: number }> {
   const row = await prisma.businessProfile.findUnique({ where: { id: PROFILE_ID } }).catch(() => null);
   if (!row) return { ...DEFAULT_BUSINESS, defaultTaxRatePercent: 0 };

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { parseDateInput, taxYearOf } from "@/lib/dates";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
 import { DIVISIONS } from "@/lib/domain";
-import { computeTax } from "@/lib/tax";
+import { computeTax, isExempt, rateForCustomer } from "@/lib/tax";
 import { getBusinessProfile, snapshotBusiness } from "@/lib/business";
 import { incomeCategoryForDivision } from "./invoice-bits";
 
@@ -70,11 +70,20 @@ async function invoiceCoreFromForm(formData: FormData) {
   // Settings change cannot rewrite an issued document.
   const rateRaw = str(formData.get("taxRatePercent"));
   const profile = await getBusinessProfile();
-  const taxRatePercent =
-    rateRaw != null && Number.isFinite(Number(rateRaw))
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { taxTreatment: true, taxRatePercent: true },
+  });
+
+  // An exempt customer is exempt no matter what the form posted — the rule
+  // is enforced here, not trusted from the browser.
+  const exempt = isExempt(customer);
+  const taxRatePercent = exempt
+    ? 0
+    : rateRaw != null && Number.isFinite(Number(rateRaw))
       ? Number(rateRaw)
-      : profile.defaultTaxRatePercent;
-  const manualTaxCents = parseDollarsToCents(formData.get("manualTax"));
+      : rateForCustomer(customer, profile.defaultTaxRatePercent);
+  const manualTaxCents = exempt ? null : parseDollarsToCents(formData.get("manualTax"));
   const tax = computeTax(lines, taxRatePercent, manualTaxCents);
 
   return {

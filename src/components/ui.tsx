@@ -30,7 +30,7 @@ export function PageHeader({
   return (
     <div className="mb-4 flex items-start justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-stone-900">{title}</h1>
+        <h1 className="display-serif text-2xl font-bold tracking-tight text-stone-900">{title}</h1>
         {sub ? <p className="mt-0.5 text-sm text-stone-500">{sub}</p> : null}
       </div>
       {action}

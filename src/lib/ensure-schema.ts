@@ -302,6 +302,11 @@ const DDL: string[] = [
   `ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "shipToAddress" TEXT`,
   `ALTER TABLE "InvoiceLine" ADD COLUMN IF NOT EXISTS "taxable" BOOLEAN NOT NULL DEFAULT true`,
 
+  // ————— V3.1: per-customer tax treatment —————
+  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "taxTreatment" TEXT NOT NULL DEFAULT 'DEFAULT'`,
+  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "taxRatePercent" DOUBLE PRECISION`,
+  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "taxExemptReason" TEXT`,
+
   // Foreign keys have no IF NOT EXISTS — swallow duplicate_object instead.
   `DO $$ BEGIN
     ALTER TABLE "Receipt" ADD CONSTRAINT "Receipt_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -346,7 +351,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
     // Probe the NEWEST schema element (table OR column) — if an older
     // deploy's schema is present but anything newer is missing, the
     // idempotent DDL below fills the gap.
-    await prisma.$queryRawUnsafe(`SELECT 1 FROM "Ticket" LIMIT 1`);
+    await prisma.$queryRawUnsafe(`SELECT "taxTreatment" FROM "Customer" LIMIT 1`);
     return { ok: true }; // schema already present
   } catch (probeErr) {
     // Something missing (or connection issue) — attempt to apply the schema.
@@ -354,7 +359,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
       for (const stmt of DDL) {
         await prisma.$executeRawUnsafe(stmt);
       }
-      await prisma.$queryRawUnsafe(`SELECT 1 FROM "Ticket" LIMIT 1`);
+      await prisma.$queryRawUnsafe(`SELECT "taxTreatment" FROM "Customer" LIMIT 1`);
       console.log("[twin-oaks] database schema applied by self-heal");
       return { ok: true };
     } catch (healErr) {

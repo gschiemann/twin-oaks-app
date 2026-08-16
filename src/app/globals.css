@@ -1,16 +1,26 @@
 @import "tailwindcss";
 
 @theme {
-  /* Twin Oaks palette — oak green + warm amber accents */
-  --color-oak-50: #f3f7f2;
-  --color-oak-100: #e4eee1;
-  --color-oak-200: #c8dcc3;
-  --color-oak-300: #a3c29c;
-  --color-oak-500: #52794d;
-  --color-oak-600: #3f6440;
-  --color-oak-700: #2f5233;
-  --color-oak-800: #274429;
-  --color-oak-900: #1e341f;
+  /* Twin Oaks print brand — deep forest green, warm cream, antique gold.
+     Token NAMES are unchanged from the old scale so every existing
+     bg-oak-700 / text-oak-800 / border-oak-200 in the app keeps resolving. */
+  --color-oak-50: #faf7f0;
+  --color-oak-100: #f2eadf;
+  --color-oak-200: #e6dccb;
+  --color-oak-300: #c9a06a;
+  --color-oak-500: #4a5f47;
+  --color-oak-600: #3b4d39;
+  --color-oak-700: #324331;
+  --color-oak-800: #2a3829;
+  --color-oak-900: #243024;
+
+  /* Antique gold — small ornaments and hairline rules. */
+  --color-gold-500: #a8763a;
+  --color-gold-300: #c9a06a;
+
+  /* Serif display family. Deliberately system-only: no webfont import and no
+     next/font, so the build never depends on fetching a font. */
+  --font-display: ui-serif, Georgia, Cambria, "Times New Roman", serif;
 }
 
 html {
@@ -18,5 +28,18 @@ html {
 }
 
 body {
-  background: var(--color-stone-100);
+  background: #faf7f0;
+  color: #2f2b25;
+}
+
+.display-serif {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.eyebrow {
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6b6559;
 }

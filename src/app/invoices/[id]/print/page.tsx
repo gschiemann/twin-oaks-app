@@ -3,7 +3,12 @@ import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import PrintButton from "@/components/PrintButton";
-import { businessAddressLines, businessFromSnapshot, getBusinessProfile } from "@/lib/business";
+import {
+  DEFAULT_LOGO_SRC,
+  businessAddressLines,
+  businessFromSnapshot,
+  getBusinessProfile,
+} from "@/lib/business";
 import { fileSrc } from "@/lib/storage";
 import { formatRate } from "@/lib/tax";
 import { deriveInvoiceStatus, paidCentsOf } from "../../invoice-bits";
@@ -49,11 +54,15 @@ export default async function InvoicePrintPage({
         {/* Header */}
         <div className="flex items-start justify-between gap-6">
           <div>
-            {business.logoPath ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={fileSrc(business.logoPath)} alt="" className="mb-2 h-14 w-auto" />
-            ) : null}
-            <div className="text-xl font-bold tracking-tight text-stone-900">{business.name}</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={business.logoPath ? fileSrc(business.logoPath) : DEFAULT_LOGO_SRC}
+              alt=""
+              className="mb-2 h-16 w-auto"
+            />
+            <div className="display-serif text-xl font-bold tracking-tight text-stone-900">
+              {business.name}
+            </div>
             {addressLines.map((line) => (
               <div key={line} className="text-sm text-stone-600">
                 {line}

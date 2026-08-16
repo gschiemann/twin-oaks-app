@@ -14,7 +14,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#2f5233",
+  themeColor: "#324331",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -24,7 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en">
-      <body className="min-h-screen bg-stone-100 text-stone-900 antialiased">
+      <body className="min-h-screen bg-oak-50 text-[#2f2b25] antialiased">
         <AppHeader />
         <main className="mx-auto max-w-2xl px-4 pt-4 pb-32 print:max-w-none print:p-0">{children}</main>
         <div className="print:hidden">

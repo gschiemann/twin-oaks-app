@@ -80,6 +80,20 @@ export default async function CustomerDetailPage({
       </div>
 
       <Card className="mb-4">
+        <h2 className="mb-1 font-semibold text-stone-900">Sales tax</h2>
+        <p className="text-sm text-stone-700">
+          {customer.taxTreatment === "EXEMPT"
+            ? `Tax exempt${customer.taxExemptReason ? ` — ${customer.taxExemptReason}` : ""}`
+            : customer.taxTreatment === "RATE"
+              ? `Charged at ${customer.taxRatePercent ?? 0}%`
+              : "Uses your default rate"}
+        </p>
+        <p className="mt-1 text-xs text-stone-500">
+          Applied automatically to every invoice for this customer.
+        </p>
+      </Card>
+
+      <Card className="mb-4">
         <h2 className="mb-1 font-semibold text-stone-900">Contact</h2>
         <Row label="Phone" value={customer.phone} />
         <Row

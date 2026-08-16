@@ -1,7 +1,13 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/dates";
-import { businessAddressLines, businessFromSnapshot, getBusinessProfile } from "@/lib/business";
+import {
+  DEFAULT_LOGO_SRC,
+  businessAddressLines,
+  businessFromSnapshot,
+  getBusinessProfile,
+} from "@/lib/business";
+import { fileSrc } from "@/lib/storage";
 import PrintButton from "@/components/PrintButton";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +56,15 @@ export default async function PackingListPage({
         {/* Header */}
         <div className="flex items-start justify-between gap-6">
           <div>
-            <div className="text-xl font-bold tracking-tight text-stone-900">{business.name}</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={business.logoPath ? fileSrc(business.logoPath) : DEFAULT_LOGO_SRC}
+              alt=""
+              className="mb-2 h-16 w-auto"
+            />
+            <div className="display-serif text-xl font-bold tracking-tight text-stone-900">
+              {business.name}
+            </div>
             {businessLines.map((line, i) => (
               <div key={`${i}-${line}`} className="text-sm text-stone-700">
                 {line}

@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { TAX_TREATMENTS } from "@/lib/tax";
 
 function str(v: FormDataEntryValue | null): string | null {
   if (typeof v !== "string") return null;
@@ -12,6 +13,15 @@ function str(v: FormDataEntryValue | null): string | null {
 function customerDataFromForm(formData: FormData) {
   const name = str(formData.get("name"));
   if (!name) return null;
+
+  const treatment = str(formData.get("taxTreatment"));
+  const taxTreatment =
+    treatment && (TAX_TREATMENTS as readonly string[]).includes(treatment)
+      ? treatment
+      : "DEFAULT";
+  const rateRaw = str(formData.get("taxRatePercent"));
+  const rate = rateRaw != null && Number.isFinite(Number(rateRaw)) ? Number(rateRaw) : null;
+
   return {
     name,
     company: str(formData.get("company")),
@@ -19,6 +29,11 @@ function customerDataFromForm(formData: FormData) {
     email: str(formData.get("email")),
     address: str(formData.get("address")),
     notes: str(formData.get("notes")),
+    taxTreatment,
+    // Only meaningful for RATE; kept as typed so switching back and forth
+    // doesn't lose the number the operator looked up.
+    taxRatePercent: rate != null ? Math.max(0, Math.min(100, rate)) : null,
+    taxExemptReason: str(formData.get("taxExemptReason")),
   };
 }
 

@@ -4,7 +4,8 @@ export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
 // iOS applies its own squircle mask and drops any alpha to black, so this one
-// fills the full square with green — no rounded corners, no transparency.
+// fills the full square with the cream ground — no rounded corners, no
+// transparency — and carries the deep-green serif monogram.
 export default async function AppleIcon() {
   return new ImageResponse(
     (
@@ -15,8 +16,9 @@ export default async function AppleIcon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#2f5233",
-          color: "#ffffff",
+          background: "#faf7f0",
+          color: "#324331",
+          fontFamily: "Georgia, serif",
           fontSize: 84,
           fontWeight: 700,
           letterSpacing: -3,

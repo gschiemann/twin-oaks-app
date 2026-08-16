@@ -1,8 +1,21 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 import { DIVISIONS, DIVISION_LABELS, type Division } from "@/lib/domain";
 import { toDateInputValue } from "@/lib/dates";
 import { btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
 import InvoiceLinesEditor from "./InvoiceLinesEditor";
+
+// Customers carry their own tax rule, so picking one fills the rate in.
+export type CustomerOption = {
+  id: string;
+  name: string;
+  company: string | null;
+  taxTreatment: string;
+  taxRatePercent: number | null;
+  taxExemptReason: string | null;
+};
 
 type Defaults = {
   id?: string;
@@ -34,12 +47,15 @@ export default function InvoiceForm({
 }: {
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
-  customers: { id: string; name: string; company: string | null }[];
+  customers: CustomerOption[];
   defaults?: Defaults;
   kind?: "INVOICE" | "QUOTE";
   defaultTaxRatePercent: number;
 }) {
   const isQuote = kind === "QUOTE";
+  const [customerId, setCustomerId] = useState(defaults.customerId ?? "");
+  const selected = customers.find((c) => c.id === customerId) ?? null;
+
   return (
     <form action={action} className="space-y-4">
       {defaults.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
@@ -53,7 +69,8 @@ export default function InvoiceForm({
           id="customerId"
           name="customerId"
           required
-          defaultValue={defaults.customerId ?? ""}
+          value={customerId}
+          onChange={(e) => setCustomerId(e.target.value)}
           className={inputCls}
         >
           <option value="" disabled>
@@ -131,6 +148,7 @@ export default function InvoiceForm({
         initialManualTaxCents={
           defaults.taxManualOverride ? (defaults.salesTaxCents ?? 0) : null
         }
+        customer={selected}
       />
 
       <div>

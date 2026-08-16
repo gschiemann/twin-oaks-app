@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { inputCls, labelCls } from "@/components/ui";
+import { rateForCustomer, type CustomerTaxRule } from "@/lib/tax";
 
 // BUG-001: the operator never calculates tax by hand. Every keystroke here
 // re-derives subtotal → taxable base → tax → total, and the same arithmetic
@@ -30,6 +31,7 @@ export default function InvoiceLinesEditor({
   defaultTaxRatePercent,
   initialTaxRatePercent,
   initialManualTaxCents,
+  customer,
 }: {
   initialLines?: {
     description: string;
@@ -40,6 +42,7 @@ export default function InvoiceLinesEditor({
   defaultTaxRatePercent: number;
   initialTaxRatePercent?: number | null;
   initialManualTaxCents?: number | null;
+  customer?: (CustomerTaxRule & { name?: string }) | null;
 }) {
   const [rows, setRows] = useState<Row[]>(() =>
     initialLines && initialLines.length > 0
@@ -61,11 +64,34 @@ export default function InvoiceLinesEditor({
     initialManualTaxCents != null ? (initialManualTaxCents / 100).toFixed(2) : "",
   );
 
+  // Picking a customer pulls in their tax rule. The first render is skipped
+  // so opening an existing invoice keeps the rate it was issued with.
+  const customerKey = customer
+    ? `${customer.taxTreatment}:${customer.taxRatePercent ?? ""}`
+    : "";
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    if (!customer) return;
+    setRate(String(rateForCustomer(customer, defaultTaxRatePercent)));
+    if (customer.taxTreatment === "EXEMPT") setManualOn(false);
+    // customerKey encodes everything that can change the derived rate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerKey]);
+
+  const exempt = customer?.taxTreatment === "EXEMPT";
   const subtotal = rows.reduce((s, r) => s + rowTotalCents(r), 0);
   const taxableBase = rows.reduce((s, r) => s + (r.taxable ? rowTotalCents(r) : 0), 0);
-  const ratePct = Number(rate) || 0;
+  const ratePct = exempt ? 0 : Number(rate) || 0;
   const computedTax = Math.round((taxableBase * ratePct) / 100);
-  const tax = manualOn ? Math.round((Number(manual.replace(/[$,\s]/g, "")) || 0) * 100) : computedTax;
+  const tax = exempt
+    ? 0
+    : manualOn
+      ? Math.round((Number(manual.replace(/[$,\s]/g, "")) || 0) * 100)
+      : computedTax;
   const total = subtotal + tax;
 
   const update = (key: number, patch: Partial<Row>) =>
@@ -150,7 +176,13 @@ export default function InvoiceLinesEditor({
 
       {/* Sales tax — calculated, with an escape hatch */}
       <div className="mt-4 rounded-xl border border-stone-200 bg-white p-3">
-        <div className="mb-3 flex items-end gap-3">
+        {exempt ? (
+          <p className="mb-3 rounded-lg bg-oak-50 px-3 py-2 text-sm font-medium text-oak-900">
+            🚫 This customer is tax exempt — no tax will be charged.
+            {customer?.taxExemptReason ? ` (${customer.taxExemptReason})` : ""}
+          </p>
+        ) : null}
+        <div className={`mb-3 flex items-end gap-3 ${exempt ? "hidden" : ""}`}>
           <div className="w-28">
             <label className="mb-1 block text-xs text-stone-500" htmlFor="taxRatePercent">
               Tax rate %
