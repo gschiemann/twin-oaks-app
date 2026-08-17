@@ -98,12 +98,13 @@ export default async function NewTicketPage({
             <label className={labelCls} htmlFor="attachment">
               Screenshot
             </label>
+            {/* A bug report is nearly always an EXISTING screenshot, so this
+                must reach Photos — `capture` would force the camera instead. */}
             <input
               id="attachment"
               name="attachment"
               type="file"
               accept="image/*"
-              capture="environment"
               className="w-full rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-6 text-sm text-stone-600 file:mr-3 file:rounded-lg file:border-0 file:bg-oak-700 file:px-4 file:py-2 file:font-semibold file:text-white"
             />
             <p className="mt-1 text-xs text-stone-500">

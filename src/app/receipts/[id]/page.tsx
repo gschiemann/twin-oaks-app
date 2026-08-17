@@ -80,11 +80,12 @@ export default async function ReceiptDetailPage({
           </p>
           <form action={attachReceiptFile} className="flex items-center gap-2">
             <input type="hidden" name="id" value={receipt.id} />
+            {/* No `capture` here on purpose: on iOS it hides Photo Library
+                and Files, which is exactly where an emailed PDF lives. */}
             <input
               name="file"
               type="file"
-              accept="image/*,application/pdf"
-              capture="environment"
+              accept="image/*,application/pdf,.pdf,.heic,.heif"
               className="min-w-0 flex-1 text-sm text-stone-600 file:mr-2 file:rounded-lg file:border-0 file:bg-oak-700 file:px-3 file:py-1.5 file:font-semibold file:text-white"
             />
             <button type="submit" className={btnSecondaryCls}>
