@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { ensureBacklogTickets } from "@/lib/backlog";
 import { formatDate } from "@/lib/dates";
 import { Card, Chip, EmptyState, PageHeader, StatCard, btnPrimaryCls } from "@/components/ui";
 import {
@@ -36,6 +37,11 @@ export default async function TicketsPage({
 }: {
   searchParams: Promise<{ status?: string; kind?: string }>;
 }) {
+  // The written backlog lives in code (src/lib/backlog.ts); anything missing
+  // from this tracker is created here, since the seed script only ever runs
+  // against a local database. Existing rows are never touched.
+  await ensureBacklogTickets();
+
   const { status: statusParam, kind: kindParam } = await searchParams;
   const status =
     statusParam && (TICKET_STATUSES as readonly string[]).includes(statusParam)

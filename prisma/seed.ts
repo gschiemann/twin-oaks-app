@@ -2,6 +2,7 @@
 // Run: pnpm db:seed (wipes and re-creates — dev only).
 
 import { PrismaClient } from "@prisma/client";
+import { BACKLOG, refOf } from "../src/lib/backlog";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -499,117 +500,26 @@ async function main() {
     update: {},
   });
 
-  // --- Tracker seeded with the real testing backlog (FR-004) --------------
-  const tickets: {
-    kind: string;
-    number: number;
-    title: string;
-    description: string;
-    priority: string;
-    status: string;
-    devNotes?: string;
-  }[] = [
-    {
-      kind: "BUG",
-      number: 1,
-      title: "Automatic sales tax calculation",
-      description:
-        "Sales tax had to be calculated and typed by hand. Needs a default rate in Settings, automatic calculation on taxable lines, recalculation when anything changes, per-item taxable flag, a rate override, a clear subtotal/taxable/rate/tax/total breakdown, and the rate stored with the transaction. Future: rate by customer location and product type.",
-      priority: "HIGH",
-      status: "READY_FOR_TESTING",
-      devNotes:
-        "Default rate lives on the Business profile. Tax computed in src/lib/tax.ts, mirrored live in the line editor. Per-line 'Taxable' checkbox; manual override supported. taxRatePercent stored on each invoice so later rate changes never rewrite history. Location/product-based rates still open.",
-    },
-    {
-      kind: "FR",
-      number: 1,
-      title: "Packing list generator",
-      description:
-        "Generate a packing list from an order/invoice with business info, customer, shipping address, order number, date, item descriptions, quantities ordered and packed, checkboxes, notes, print and PDF. Future: QR/barcode scanning, partial shipments, backorders, tracking.",
-      priority: "HIGH",
-      status: "READY_FOR_TESTING",
-      devNotes:
-        "At /invoices/<id>/packing, linked from the invoice. No prices shown. Ship-to falls back to the customer address; pen-friendly boxes for qty packed and notes. Scanning/partial shipments still open.",
-    },
-    {
-      kind: "FR",
-      number: 2,
-      title: "AI assistant integration",
-      description:
-        "Integrate an AI assistant through an API rather than giving unrestricted app access: analyze expenses, help categorize, review invoices, find missing information, analyze equipment and print-job costs, answer questions about stored records, help build reports, flag bookkeeping issues. Permission-based, limited to exposed data, with confirmation required before anything is changed, deleted, sent or finalized.",
-      priority: "MEDIUM",
-      status: "NEW",
-    },
-    {
-      kind: "FR",
-      number: 3,
-      title: "AI / developer testing mode",
-      description:
-        "A QA mode that hands the AI the current screen name, its fields/buttons/actions and sample data, with an 'Analyze this screen' function returning UX suggestions, likely bugs, missing functions and test cases — plus exportable errors and whole-workflow analysis, without granting remote access to the machine.",
-      priority: "MEDIUM",
-      status: "NEW",
-    },
-    {
-      kind: "FR",
-      number: 4,
-      title: "Internal bug & feature tracker",
-      description:
-        "A place inside the app to record issues and ideas found while testing, numbered BUG/FR/UI/TAX, each with description, priority, date, optional screenshot, status and developer notes.",
-      priority: "HIGH",
-      status: "READY_FOR_TESTING",
-      devNotes: "This tracker. Numbering is per kind. Screenshots attach via the camera.",
-    },
-    {
-      kind: "FR",
-      number: 5,
-      title: "Release / test checklist",
-      description:
-        "Before calling a version stable, run the major workflows end to end: customers, invoices, tax, payments, receipts, packing lists, expenses, imports, search, reports, printing, PDF, backup/recovery, permissions, and the intended devices.",
-      priority: "MEDIUM",
-      status: "READY_FOR_TESTING",
-      devNotes: "Interactive checklist at Settings → Release checklist; progress saves on the device.",
-    },
-    {
-      kind: "FR",
-      number: 6,
-      title: "Receipt & online purchase import",
-      description:
-        "Capture online business purchases: upload PDF/image receipts, drag-and-drop on PC, extract vendor, date, order number, line items, subtotal, tax, shipping and total, suggest a category, let the user correct before saving, keep the original attached, detect duplicates, and assign the purchase to equipment/job/property. Future: emailed receipts, Amazon history, bank CSV matching, category suggestions from vendor history.",
-      priority: "HIGH",
-      status: "WORKING",
-      devNotes:
-        "Done: upload (photo/PDF), forwarded-email import with vendor/date/total/tax/number extraction, original always stored, duplicate suppression on email, assign-to-asset on the expense. Open: line-item and shipping extraction, category suggestion from vendor history, drag-and-drop, bank CSV matching.",
-    },
-    {
-      kind: "FR",
-      number: 7,
-      title: "Business information / company profile",
-      description:
-        "One Business Profile that populates invoices, packing lists, receipts, quotes and statements. Editable once in Settings, supports a logo, offers document preview, and leaves already-finalized documents unchanged.",
-      priority: "HIGH",
-      status: "READY_FOR_TESTING",
-      devNotes:
-        "Settings → Business profile, including the default tax rate and logo upload. Details are frozen onto an invoice when it is marked sent, so past documents never change.",
-    },
-  ];
-
-  for (const t of tickets) {
+  // --- Tracker (FR-004) ---------------------------------------------------
+  // Single source of truth for the backlog, shared with the live app so the
+  // two can't drift: src/lib/backlog.ts.
+  for (const item of BACKLOG) {
     await prisma.ticket.create({
       data: {
-        ref: `${t.kind}-${String(t.number).padStart(3, "0")}`,
-        kind: t.kind,
-        number: t.number,
-        title: t.title,
-        description: t.description,
-        priority: t.priority,
-        status: t.status,
-        devNotes: t.devNotes ?? null,
+        ref: refOf(item),
+        kind: item.kind,
+        number: item.number,
+        title: item.title,
+        description: item.description,
+        priority: item.priority,
+        status: item.status,
+        devNotes: item.devNotes ?? null,
       },
     });
   }
 
   console.log(
-    "Seeded: 6 vendors, 3 assets, 7 expenses, 3 income, 3 receipts, 3 maintenance records, 2 customers, 2 invoices (1 paid), 2 mileage trips, business profile, 8 tracker items.",
+    `Seeded: 6 vendors, 3 assets, 7 expenses, 3 income, 3 receipts, 3 maintenance records, 2 customers, 2 invoices (1 paid), 2 mileage trips, business profile, ${BACKLOG.length} tracker items.`,
   );
 }
 
