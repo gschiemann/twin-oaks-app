@@ -63,7 +63,9 @@ export async function updateReceipt(formData: FormData) {
     },
   });
 
-  redirect(`/receipts/${id}`);
+  // Back to the list, not the same page — "it just sits there" reads as the
+  // save having done nothing. The list shows a saved note via ?saved=1.
+  redirect("/receipts?saved=1");
 }
 
 // Attach a photo/PDF to an existing receipt record (e.g. emailed receipt

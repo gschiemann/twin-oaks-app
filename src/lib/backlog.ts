@@ -111,7 +111,7 @@ export const BACKLOG: BacklogItem[] = [
     priority: "MEDIUM",
     status: "READY_FOR_TESTING",
     devNotes:
-      "Every form input now carries min-width:0 (shared style in components/ui.tsx), which lets iOS date fields shrink to their column. Fixes the same layout on Expenses, Income, Invoices, Assets and Mileage, which use the same two-column pattern.",
+      "Two rounds: min-width:0 on every input helped desktop but iOS date fields kept their native intrinsic width and still overlapped (confirmed on iPhone and iPad). Real fix is appearance:none on date/time inputs (globals.css), which strips the native widget sizing so they obey their column. Applies app-wide — Expenses, Income, Invoices, Assets, Mileage share the pattern.",
   },
   {
     kind: "FR",

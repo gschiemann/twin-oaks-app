@@ -43,3 +43,19 @@ body {
   text-transform: uppercase;
   color: #6b6559;
 }
+
+/* UI-001: iOS Safari gives date/time inputs an intrinsic minimum width that
+   IGNORES min-width:0 and paints over the neighboring column in a two-column
+   row (seen live on iPhone and iPad). appearance:none strips the native
+   widget chrome so they size like ordinary text fields; the ::-webkit rule
+   left-aligns the value, which iOS otherwise centers. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+}
+input::-webkit-date-and-time-value {
+  text-align: left;
+}

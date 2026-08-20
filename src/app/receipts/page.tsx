@@ -17,9 +17,9 @@ const TABS = [
 export default async function ReceiptsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; saved?: string }>;
 }) {
-  const { tab = "inbox" } = await searchParams;
+  const { tab = "inbox", saved } = await searchParams;
 
   const where =
     tab === "inbox"
@@ -48,6 +48,12 @@ export default async function ReceiptsPage({
           </Link>
         }
       />
+
+      {saved ? (
+        <Card className="mb-4 border-oak-200 bg-oak-50 text-sm font-medium text-oak-900">
+          ✅ Receipt saved.
+        </Card>
+      ) : null}
 
       <div className="mb-4 flex gap-2">
         {TABS.map((t) => (
