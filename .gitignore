@@ -24,3 +24,5 @@ var/uploads/*
 # misc
 .DS_Store
 *.log
+.vercel
+.env*
