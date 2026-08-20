@@ -46,6 +46,7 @@ export const DEFAULT_LOGO_SRC = "/brand/twin-oaks-logo.png";
 export type BusinessProfileInfo = BusinessInfo & {
   defaultTaxRatePercent: number;
   divisions: Division[];
+  householdCategoriesCsv: string | null;
 };
 
 function parseDivisions(csv: string | null): Division[] {
@@ -64,7 +65,7 @@ export async function getBusinessProfile(accountId: string): Promise<BusinessPro
     // created at signup. A missing row on another account still renders.
     const base = accountId === OWNER_ACCOUNT_ID ? DEFAULT_BUSINESS : { ...DEFAULT_BUSINESS, name: "My business", addressLine1: null, city: null, state: null, postalCode: null, email: null, website: null };
     const divisions: Division[] = accountId === OWNER_ACCOUNT_ID ? [...DIVISIONS] : ["GENERAL"];
-    return { ...base, defaultTaxRatePercent: 0, divisions };
+    return { ...base, defaultTaxRatePercent: 0, divisions, householdCategoriesCsv: null };
   }
   return {
     name: row.name,
@@ -79,6 +80,7 @@ export async function getBusinessProfile(accountId: string): Promise<BusinessPro
     logoPath: row.logoPath,
     defaultTaxRatePercent: row.defaultTaxRatePercent,
     divisions: parseDivisions(row.divisionsCsv),
+    householdCategoriesCsv: row.householdCategoriesCsv,
   };
 }
 

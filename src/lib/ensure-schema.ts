@@ -417,6 +417,25 @@ const DDL: string[] = [
     CONSTRAINT "HouseholdBudget_pkey" PRIMARY KEY ("id")
 )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "HouseholdBudget_accountId_category_key" ON "HouseholdBudget"("accountId", "category")`,
+
+  // ————— V4.2: full household budgeting —————
+  `ALTER TABLE "HouseholdExpense" ADD COLUMN IF NOT EXISTS "kind" TEXT NOT NULL DEFAULT 'EXPENSE'`,
+  `ALTER TABLE "HouseholdExpense" ADD COLUMN IF NOT EXISTS "recurringId" TEXT`,
+  `CREATE INDEX IF NOT EXISTS "HouseholdExpense_recurringId_idx" ON "HouseholdExpense"("recurringId")`,
+  `ALTER TABLE "BusinessProfile" ADD COLUMN IF NOT EXISTS "householdCategoriesCsv" TEXT`,
+  // LAST on purpose — the probe targets this table.
+  `CREATE TABLE IF NOT EXISTS "RecurringHousehold" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "kind" TEXT NOT NULL DEFAULT 'EXPENSE',
+    "description" TEXT NOT NULL,
+    "amountCents" INTEGER NOT NULL,
+    "category" TEXT NOT NULL,
+    "dayOfMonth" INTEGER NOT NULL DEFAULT 1,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "RecurringHousehold_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "RecurringHousehold_accountId_idx" ON "RecurringHousehold"("accountId")`,
 ];
 
 export type DbStatus =
@@ -445,7 +464,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
     // Probe the NEWEST schema element (table OR column) — if an older
     // deploy's schema is present but anything newer is missing, the
     // idempotent DDL below fills the gap.
-    await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "HouseholdBudget" LIMIT 1`);
+    await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "RecurringHousehold" LIMIT 1`);
     return { ok: true }; // schema already present
   } catch (probeErr) {
     // Something missing (or connection issue) — attempt to apply the schema.
@@ -453,7 +472,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
       for (const stmt of DDL) {
         await prisma.$executeRawUnsafe(stmt);
       }
-      await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "HouseholdBudget" LIMIT 1`);
+      await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "RecurringHousehold" LIMIT 1`);
       console.log("[twin-oaks] database schema applied by self-heal");
       return { ok: true };
     } catch (healErr) {

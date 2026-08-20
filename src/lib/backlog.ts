@@ -123,7 +123,7 @@ export const BACKLOG: BacklogItem[] = [
     priority: "HIGH",
     status: "READY_FOR_TESTING",
     devNotes:
-      "Shipped in v4.1. Household lives at /household (More → Household & budgets): ten-second add form, month navigation, per-category spent-vs-budget bars (red when over), and a budgets editor (one monthly number per category, blank = untracked). Own database tables per account — by construction it cannot leak into business books, exports include it, and each account's household data is private to them. A dashboard card appears once the first entry or budget exists.",
+      "Shipped in v4.1; grown into a full budgeter in v4.2. Household lives at /household (More → Household & budgets): money IN and OUT (pick an income category like Paycheck and it counts as money in), repeating bills & income that post themselves each month (rent on the 1st — stopping one keeps past months), editing/deleting any entry, your own custom categories, per-category spent-vs-budget bars, a pacing line (percent of month vs percent of budget), a six-month income-vs-spending chart, household search results, and a per-year CSV download. Own database tables per account — by construction it cannot leak into business books or the Tax Center. The dashboard card shows what's LEFT of the monthly budget.",
   },
   {
     kind: "UI",

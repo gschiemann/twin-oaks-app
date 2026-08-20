@@ -91,7 +91,7 @@ export default async function DashboardPage() {
       include: { payments: { select: { amountCents: true } } },
     }),
     prisma.householdExpense.aggregate({
-      where: { accountId, date: { gte: monthStart } },
+      where: { accountId, kind: { not: "INCOME" }, date: { gte: monthStart } },
       _sum: { amountCents: true },
       _count: true,
     }),
@@ -171,12 +171,23 @@ export default async function DashboardPage() {
               <p className="text-sm font-medium text-stone-700">🏠 Household this month</p>
               <p className="text-xs text-stone-500">
                 {householdBudgets._count > 0
-                  ? `of ${formatCents(householdBudgets._sum.monthlyCents ?? 0)} budgeted`
+                  ? `${formatCents(householdMonth._sum.amountCents ?? 0)} of ${formatCents(householdBudgets._sum.monthlyCents ?? 0)} spent`
                   : "Personal spending — separate from the business"}
               </p>
             </div>
-            <span className="text-xl font-bold tabular-nums text-stone-900">
-              {formatCents(householdMonth._sum.amountCents ?? 0)}
+            <span
+              className={`text-xl font-bold tabular-nums ${
+                householdBudgets._count > 0 &&
+                (householdMonth._sum.amountCents ?? 0) > (householdBudgets._sum.monthlyCents ?? 0)
+                  ? "text-red-700"
+                  : "text-stone-900"
+              }`}
+            >
+              {householdBudgets._count > 0
+                ? (householdMonth._sum.amountCents ?? 0) > (householdBudgets._sum.monthlyCents ?? 0)
+                  ? `−${formatCents((householdMonth._sum.amountCents ?? 0) - (householdBudgets._sum.monthlyCents ?? 0))}`
+                  : `${formatCents((householdBudgets._sum.monthlyCents ?? 0) - (householdMonth._sum.amountCents ?? 0))} left`
+                : formatCents(householdMonth._sum.amountCents ?? 0)}
             </span>
           </Card>
         </Link>

@@ -40,6 +40,15 @@ export const HOUSEHOLD_CATEGORIES = [
 ] as const;
 export type HouseholdCategory = (typeof HOUSEHOLD_CATEGORIES)[number];
 
+// Money coming INTO the household (kind INCOME on HouseholdExpense).
+export const HOUSEHOLD_INCOME_CATEGORIES = [
+  "Paycheck",
+  "Business income",
+  "Benefits",
+  "Gifts received",
+  "Other income",
+] as const;
+
 // Accounting categories — bookkeeping/tax preparation level (SPEC §6).
 export const ACCOUNTING_CATEGORIES = [
   "Repairs & maintenance",

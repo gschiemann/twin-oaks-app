@@ -44,6 +44,12 @@ function whereFor(terms: SearchTerm[], fields: SearchableFields) {
   };
 }
 
+const HOUSEHOLD_FIELDS: SearchableFields = {
+  text: ["description", "category", "notes", "paymentMethod"],
+  money: ["amountCents"],
+  date: "date",
+};
+
 const EXPENSE_FIELDS: SearchableFields = {
   text: [
     "description",
@@ -127,9 +133,9 @@ export default async function SearchPage({
     .slice(0, 6)
     .map((word) => classifyTerm(word, now));
 
-  const [expenses, receipts, assets, incomes, maintenance, customers, invoices, trips] =
+  const [expenses, receipts, assets, incomes, maintenance, customers, invoices, trips, household] =
     terms.length === 0
-      ? [[], [], [], [], [], [], [], []]
+      ? [[], [], [], [], [], [], [], [], []]
       : await Promise.all([
           prisma.expense.findMany({
             where: { AND: [{ accountId }, whereFor(terms, EXPENSE_FIELDS)] },
@@ -172,6 +178,11 @@ export default async function SearchPage({
             take: 25,
             orderBy: { date: "desc" },
           }),
+          prisma.householdExpense.findMany({
+            where: { AND: [{ accountId }, whereFor(terms, HOUSEHOLD_FIELDS)] },
+            take: 25,
+            orderBy: { date: "desc" },
+          }),
         ]);
 
   const total =
@@ -182,7 +193,8 @@ export default async function SearchPage({
     maintenance.length +
     customers.length +
     invoices.length +
-    trips.length;
+    trips.length +
+    household.length;
 
   return (
     <div>
@@ -230,6 +242,38 @@ export default async function SearchPage({
                       </span>
                     </span>
                     <span className="font-semibold tabular-nums">{formatCents(e.amountCents)}</span>
+                  </Link>
+                ))}
+              </Card>
+            </section>
+          ) : null}
+
+          {household.length > 0 ? (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-500">
+                Household
+              </h2>
+              <Card className="divide-y divide-stone-100 p-0">
+                {household.map((e) => (
+                  <Link
+                    key={e.id}
+                    href={`/household/entry/${e.id}`}
+                    className="flex justify-between gap-3 px-4 py-3"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">
+                        {e.description ?? e.category}
+                      </span>
+                      <span className="text-sm text-stone-500">
+                        {e.category} · {formatDate(e.date)}
+                      </span>
+                    </span>
+                    <span
+                      className={`font-semibold tabular-nums ${e.kind === "INCOME" ? "text-emerald-700" : ""}`}
+                    >
+                      {e.kind === "INCOME" ? "+" : ""}
+                      {formatCents(e.amountCents)}
+                    </span>
                   </Link>
                 ))}
               </Card>

@@ -45,6 +45,27 @@ export async function GET(
     );
   }
 
+  if (report === "household") {
+    const rows = await prisma.householdExpense.findMany({
+      where: {
+        accountId,
+        date: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) },
+      },
+      orderBy: { date: "asc" },
+    });
+    return csvResponse(
+      `household-${year}.csv`,
+      toCsv(
+        ["Date", "Type", "Category", "Description", "Amount", "Payment method", "Repeating", "Notes"],
+        rows.map((e) => [
+          dateOnly(e.date), e.kind === "INCOME" ? "Money in" : "Spending", e.category,
+          e.description, dollars(e.amountCents), e.paymentMethod,
+          e.recurringId ? "YES" : "", e.notes,
+        ]),
+      ),
+    );
+  }
+
   if (report === "income") {
     const rows = await prisma.income.findMany({
       where: { accountId, taxYear: year },

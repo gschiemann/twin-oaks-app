@@ -193,13 +193,19 @@ model HouseholdExpense {
   date          DateTime
   description   String?
   amountCents   Int
+  // EXPENSE | INCOME — one table so a month's summary is one query. Income
+  // categories live in HOUSEHOLD_INCOME_CATEGORIES.
+  kind          String   @default("EXPENSE")
   category      String // see HOUSEHOLD_CATEGORIES in src/lib/domain.ts
   paymentMethod String?
   notes         String?
+  // Set when this row was posted automatically from a repeating item.
+  recurringId   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([accountId, date])
+  @@index([recurringId])
 }
 
 // One monthly target per category; spending is compared against it.
@@ -210,6 +216,23 @@ model HouseholdBudget {
   monthlyCents Int
 
   @@unique([accountId, category])
+}
+
+// Bills and paychecks that post themselves: rent on the 1st, the streaming
+// bundle on the 12th. Materialized into HouseholdExpense rows (stamped with
+// recurringId) the first time the month is opened — idempotent, so a month
+// can be viewed a hundred times and each item posts exactly once.
+model RecurringHousehold {
+  id          String   @id @default(cuid())
+  accountId   String
+  kind        String   @default("EXPENSE") // EXPENSE | INCOME
+  description String
+  amountCents Int
+  category    String
+  dayOfMonth  Int      @default(1) // 1–28 so it exists in every month
+  createdAt   DateTime @default(now())
+
+  @@index([accountId])
 }
 
 // FR-007: entered once in Settings, reused on every customer-facing
@@ -223,6 +246,9 @@ model BusinessProfile {
   // FARM,TECH,SHARED trio (the owner); new accounts get "GENERAL", which
   // hides the division picker across the app.
   divisionsCsv          String?
+  // Extra expense categories this household added ("Homeschool,Horses").
+  // Appended to the built-in HOUSEHOLD_CATEGORIES everywhere.
+  householdCategoriesCsv String?
   name                  String   @default("Twin Oaks Farm & Tech")
   addressLine1          String?
   addressLine2          String?
