@@ -1,7 +1,5 @@
 import {
   ACCOUNTING_CATEGORIES,
-  DIVISIONS,
-  DIVISION_LABELS,
   MANAGEMENT_CATEGORY_SUGGESTIONS,
   PAYMENT_METHODS,
   TAX_STATUSES,
@@ -10,6 +8,7 @@ import {
 } from "@/lib/domain";
 import { toDateInputValue } from "@/lib/dates";
 import { btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
+import DivisionField from "@/components/DivisionField";
 
 type Defaults = {
   id?: string;
@@ -36,6 +35,7 @@ export default function ExpenseForm({
   vendors,
   assets,
   fromReceiptId,
+  divisions,
 }: {
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
@@ -43,6 +43,7 @@ export default function ExpenseForm({
   vendors: string[];
   assets: { id: string; name: string }[];
   fromReceiptId?: string;
+  divisions: Division[];
 }) {
   const cents = (v: number | null | undefined) => (v != null ? (v / 100).toFixed(2) : "");
 
@@ -114,26 +115,7 @@ export default function ExpenseForm({
         />
       </div>
 
-      <div>
-        <span className={labelCls}>Division *</span>
-        <div className="grid grid-cols-3 gap-2">
-          {DIVISIONS.map((d) => (
-            <label
-              key={d}
-              className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm font-medium text-stone-700 has-checked:border-oak-600 has-checked:bg-oak-50 has-checked:text-oak-800"
-            >
-              <input
-                type="radio"
-                name="division"
-                value={d}
-                defaultChecked={(defaults.division ?? "FARM") === d}
-                className="accent-oak-700"
-              />
-              {DIVISION_LABELS[d as Division]}
-            </label>
-          ))}
-        </div>
-      </div>
+      <DivisionField divisions={divisions} defaultValue={defaults.division ?? "FARM"} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>

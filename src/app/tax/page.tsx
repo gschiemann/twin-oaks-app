@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatCents } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { DIVISION_LABELS, type Division } from "@/lib/domain";
@@ -14,9 +15,11 @@ export default async function TaxCenterPage({
 }: {
   searchParams: Promise<{ year?: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { year } = await searchParams;
 
   const yearsRaw = await prisma.expense.findMany({
+    where: { accountId },
     distinct: ["taxYear"],
     select: { taxYear: true },
     orderBy: { taxYear: "desc" },
@@ -35,42 +38,42 @@ export default async function TaxCenterPage({
     capital,
     mileage,
   ] = await Promise.all([
-    prisma.expense.aggregate({ where: { taxYear }, _sum: { amountCents: true } }),
-    prisma.income.aggregate({ where: { taxYear }, _sum: { amountCents: true } }),
+    prisma.expense.aggregate({ where: { accountId, taxYear }, _sum: { amountCents: true } }),
+    prisma.income.aggregate({ where: { accountId, taxYear }, _sum: { amountCents: true } }),
     prisma.expense.groupBy({
       by: ["accountingCategory"],
-      where: { taxYear },
+      where: { accountId, taxYear },
       _sum: { amountCents: true },
       _count: true,
       orderBy: { _sum: { amountCents: "desc" } },
     }),
     prisma.expense.groupBy({
       by: ["division"],
-      where: { taxYear },
+      where: { accountId, taxYear },
       _sum: { amountCents: true },
     }),
     prisma.income.groupBy({
       by: ["category"],
-      where: { taxYear },
+      where: { accountId, taxYear },
       _sum: { amountCents: true },
       orderBy: { _sum: { amountCents: "desc" } },
     }),
     prisma.expense.findMany({
-      where: { taxYear, taxStatus: { in: ["NEEDS_REVIEW", "MIXED_PERSONAL", "MISSING_DOCS"] } },
+      where: { accountId, taxYear, taxStatus: { in: ["NEEDS_REVIEW", "MIXED_PERSONAL", "MISSING_DOCS"] } },
       orderBy: { amountCents: "desc" },
       take: 50,
     }),
     prisma.expense.findMany({
-      where: { taxYear, receipts: { none: {} } },
+      where: { accountId, taxYear, receipts: { none: {} } },
       orderBy: { amountCents: "desc" },
       take: 50,
     }),
     prisma.expense.findMany({
-      where: { taxYear, isCapital: true },
+      where: { accountId, taxYear, isCapital: true },
       orderBy: { amountCents: "desc" },
     }),
     prisma.mileageLog.aggregate({
-      where: { taxYear },
+      where: { accountId, taxYear },
       _sum: { miles: true },
       _count: true,
     }),

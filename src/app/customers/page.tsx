@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatCents } from "@/lib/money";
 import { Card, EmptyState, PageHeader, btnPrimaryCls } from "@/components/ui";
 import { ChevronRightIcon } from "@/components/Icons";
@@ -8,7 +9,9 @@ import { outstandingCentsOf, paidCentsOf } from "../invoices/invoice-bits";
 export const dynamic = "force-dynamic";
 
 export default async function CustomersPage() {
+  const accountId = await requireAccountId();
   const customers = await prisma.customer.findMany({
+    where: { accountId },
     orderBy: { name: "asc" },
     include: { invoices: { include: { payments: { select: { amountCents: true } } } } },
   });

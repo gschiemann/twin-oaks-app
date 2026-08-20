@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatCents } from "@/lib/money";
 import { startOfYear } from "@/lib/dates";
 import { DIVISION_LABELS, type Division } from "@/lib/domain";
@@ -9,15 +10,17 @@ import { TractorIcon, ChevronRightIcon } from "@/components/Icons";
 export const dynamic = "force-dynamic";
 
 export default async function AssetsPage() {
+  const accountId = await requireAccountId();
   const [assets, maintYtd, maintAll] = await Promise.all([
-    prisma.asset.findMany({ orderBy: [{ division: "asc" }, { name: "asc" }] }),
+    prisma.asset.findMany({ where: { accountId }, orderBy: [{ division: "asc" }, { name: "asc" }] }),
     prisma.maintenanceRecord.groupBy({
       by: ["assetId"],
-      where: { date: { gte: startOfYear() } },
+      where: { accountId, date: { gte: startOfYear() } },
       _sum: { partsCostCents: true, laborCostCents: true },
     }),
     prisma.maintenanceRecord.groupBy({
       by: ["assetId"],
+      where: { accountId },
       _sum: { partsCostCents: true, laborCostCents: true },
     }),
   ]);

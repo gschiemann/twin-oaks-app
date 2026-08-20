@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { Card, PageHeader } from "@/components/ui";
 import CustomerForm from "../../CustomerForm";
 import { updateCustomer } from "../../actions";
@@ -11,8 +12,9 @@ export default async function EditCustomerPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { id } = await params;
-  const customer = await prisma.customer.findUnique({ where: { id } });
+  const customer = await prisma.customer.findFirst({ where: { id, accountId } });
   if (!customer) notFound();
 
   return (

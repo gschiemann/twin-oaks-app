@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { parseDateInput, taxYearOf } from "@/lib/dates";
 import { parseDollarsToCents } from "@/lib/money";
-import { DIVISIONS, TAX_STATUSES } from "@/lib/domain";
+import { ALL_DIVISIONS, TAX_STATUSES } from "@/lib/domain";
 
 function str(v: FormDataEntryValue | null): string | null {
   if (typeof v !== "string") return null;
@@ -12,7 +13,7 @@ function str(v: FormDataEntryValue | null): string | null {
   return t === "" ? null : t;
 }
 
-async function expenseDataFromForm(formData: FormData) {
+async function expenseDataFromForm(accountId: string, formData: FormData) {
   const date = parseDateInput(formData.get("date")) ?? new Date();
   const amountCents = parseDollarsToCents(formData.get("amount"));
   const description = str(formData.get("description"));
@@ -20,23 +21,24 @@ async function expenseDataFromForm(formData: FormData) {
   const accountingCategory = str(formData.get("accountingCategory"));
 
   if (amountCents == null || !description || !accountingCategory) return null;
-  if (!division || !(DIVISIONS as readonly string[]).includes(division)) return null;
+  if (!division || !(ALL_DIVISIONS as readonly string[]).includes(division)) return null;
 
   const taxStatus = str(formData.get("taxStatus"));
   const vendorName = str(formData.get("vendorName"));
 
-  // Vendors dedupe by name so reports can group by vendor (SPEC §5).
+  // Vendors dedupe by name (per account) so reports can group by vendor.
   let vendorId: string | null = null;
   if (vendorName) {
     const vendor = await prisma.vendor.upsert({
-      where: { name: vendorName },
-      create: { name: vendorName },
+      where: { accountId_name: { accountId, name: vendorName } },
+      create: { accountId, name: vendorName },
       update: {},
     });
     vendorId = vendor.id;
   }
 
   return {
+    accountId,
     date,
     taxYear: taxYearOf(date),
     amountCents,
@@ -62,7 +64,8 @@ async function expenseDataFromForm(formData: FormData) {
 }
 
 export async function createExpense(formData: FormData) {
-  const data = await expenseDataFromForm(formData);
+  const accountId = await requireAccountId();
+  const data = await expenseDataFromForm(accountId, formData);
   if (!data) redirect("/expenses/new?error=missing");
 
   const expense = await prisma.expense.create({ data });
@@ -72,8 +75,8 @@ export async function createExpense(formData: FormData) {
   const fromReceiptId = str(formData.get("fromReceiptId"));
   if (fromReceiptId) {
     await prisma.receipt
-      .update({
-        where: { id: fromReceiptId },
+      .updateMany({
+        where: { id: fromReceiptId, accountId },
         data: {
           expenseId: expense.id,
           status: "CATEGORIZED",
@@ -89,25 +92,27 @@ export async function createExpense(formData: FormData) {
 }
 
 export async function updateExpense(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/expenses");
-  const data = await expenseDataFromForm(formData);
+  const data = await expenseDataFromForm(accountId, formData);
   if (!data) redirect(`/expenses/${id}/edit?error=missing`);
 
-  await prisma.expense.update({ where: { id }, data });
+  await prisma.expense.updateMany({ where: { id, accountId }, data });
   redirect(`/expenses/${id}`);
 }
 
 export async function deleteExpense(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/expenses");
 
   // Never orphan documentation silently: linked receipts go back to
   // NEEDS_REVIEW instead of disappearing with the expense.
   await prisma.receipt.updateMany({
-    where: { expenseId: id },
+    where: { expenseId: id, accountId },
     data: { status: "NEEDS_REVIEW" },
   });
-  await prisma.expense.delete({ where: { id } });
+  await prisma.expense.deleteMany({ where: { id, accountId } });
   redirect("/expenses");
 }

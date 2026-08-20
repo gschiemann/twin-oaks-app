@@ -6,6 +6,8 @@ import { BACKLOG, refOf } from "../src/lib/backlog";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+// Multi-user: everything seeded here belongs to the owner account.
+const OWNER = "owner";
 const prisma = new PrismaClient();
 
 // 1×1 gray PNG — stands in for a receipt photo in dev.
@@ -15,6 +17,18 @@ const PLACEHOLDER_PNG = Buffer.from(
 );
 
 async function main() {
+  // The owner account row everything below hangs off.
+  await prisma.account.upsert({
+    where: { id: OWNER },
+    create: {
+      id: OWNER,
+      email: "twinoaksfarmandtech@gmail.com",
+      name: "Twin Oaks Farm & Tech",
+      passwordHash: "", // env-password login only
+    },
+    update: {},
+  });
+
   // Wipe (dev only) — order matters for relations.
   await prisma.maintenanceRecord.deleteMany();
   await prisma.receipt.deleteMany();
@@ -39,12 +53,13 @@ async function main() {
   ];
   const vendors: Record<string, string> = {};
   for (const name of vendorNames) {
-    const v = await prisma.vendor.create({ data: { name } });
+    const v = await prisma.vendor.create({ data: { accountId: OWNER, name } });
     vendors[name] = v.id;
   }
 
   const tractor = await prisma.asset.create({
     data: {
+      accountId: OWNER,
       name: "Tractor #1",
       assetTag: "TO-EQ-001",
       kind: "Tractor",
@@ -64,6 +79,7 @@ async function main() {
 
   const printer = await prisma.asset.create({
     data: {
+      accountId: OWNER,
       name: "Bambu H2D #1",
       assetTag: "TO-EQ-010",
       kind: "3D printer",
@@ -81,6 +97,7 @@ async function main() {
 
   await prisma.asset.create({
     data: {
+      accountId: OWNER,
       name: "Stock Trailer",
       assetTag: "TO-EQ-002",
       kind: "Trailer",
@@ -96,6 +113,7 @@ async function main() {
   // Tractor #1 → Hydraulic hose → $87.42 → View receipt.
   const hydraulicHose = await prisma.expense.create({
     data: {
+      accountId: OWNER,
       date: new Date(2026, 6, 18, 12),
       taxYear: 2026,
       vendorId: vendors["Tractor Supply Co"],
@@ -115,6 +133,7 @@ async function main() {
 
   await prisma.receipt.create({
     data: {
+      accountId: OWNER,
       status: "CATEGORIZED",
       filePath: "seed-receipt-1.png",
       fileName: "tractor-supply-hose.png",
@@ -131,6 +150,7 @@ async function main() {
 
   await prisma.maintenanceRecord.create({
     data: {
+      accountId: OWNER,
       assetId: tractor.id,
       date: new Date(2026, 6, 18, 12),
       hoursAtService: 408,
@@ -144,6 +164,7 @@ async function main() {
 
   await prisma.maintenanceRecord.create({
     data: {
+      accountId: OWNER,
       assetId: tractor.id,
       date: new Date(2026, 4, 2, 12),
       hoursAtService: 380,
@@ -156,6 +177,7 @@ async function main() {
 
   await prisma.maintenanceRecord.create({
     data: {
+      accountId: OWNER,
       assetId: printer.id,
       date: new Date(2026, 6, 30, 12),
       hoursAtService: 620,
@@ -250,6 +272,7 @@ async function main() {
   for (const e of simpleExpenses) {
     await prisma.expense.create({
       data: {
+        accountId: OWNER,
         date: e.date,
         taxYear: e.date.getFullYear(),
         vendorId: vendors[e.vendor],
@@ -270,6 +293,7 @@ async function main() {
   // Two receipts waiting in the Inbox (the daily-driver flow).
   await prisma.receipt.create({
     data: {
+      accountId: OWNER,
       status: "INBOX",
       filePath: "seed-receipt-2.png",
       fileName: "rural-king-aug.png",
@@ -282,6 +306,7 @@ async function main() {
   });
   await prisma.receipt.create({
     data: {
+      accountId: OWNER,
       status: "INBOX",
       filePath: "seed-receipt-3.png",
       fileName: "gas-station.png",
@@ -300,6 +325,7 @@ async function main() {
   );
   await prisma.receipt.create({
     data: {
+      accountId: OWNER,
       status: "INBOX",
       source: "EMAIL",
       emailFrom: "greg@example.com",
@@ -318,6 +344,7 @@ async function main() {
   // --- Income -------------------------------------------------------------
   await prisma.income.create({
     data: {
+      accountId: OWNER,
       date: new Date(2026, 7, 4, 12),
       taxYear: 2026,
       source: "Acme Fabrication",
@@ -330,6 +357,7 @@ async function main() {
   });
   await prisma.income.create({
     data: {
+      accountId: OWNER,
       date: new Date(2026, 6, 20, 12),
       taxYear: 2026,
       source: "Hartley family",
@@ -344,6 +372,7 @@ async function main() {
   // --- V2: customers, invoices, payments, mileage -------------------------
   const acme = await prisma.customer.create({
     data: {
+      accountId: OWNER,
       name: "Dana Reyes",
       company: "Acme Fabrication",
       phone: "555-201-8890",
@@ -353,11 +382,12 @@ async function main() {
     },
   });
   const hartley = await prisma.customer.create({
-    data: { name: "Jane Hartley", phone: "555-330-1121", notes: "Buys market lambs each summer." },
+    data: { accountId: OWNER, name: "Jane Hartley", phone: "555-330-1121", notes: "Buys market lambs each summer." },
   });
 
   const inv1 = await prisma.invoice.create({
     data: {
+      accountId: OWNER,
       number: "INV-001",
       customerId: acme.id,
       division: "TECH",
@@ -384,6 +414,7 @@ async function main() {
   });
   const inv1Income = await prisma.income.create({
     data: {
+      accountId: OWNER,
       date: new Date(2026, 7, 6, 12),
       taxYear: 2026,
       source: "Acme Fabrication",
@@ -396,6 +427,7 @@ async function main() {
   });
   await prisma.payment.create({
     data: {
+      accountId: OWNER,
       invoiceId: inv1.id,
       customerId: acme.id,
       date: new Date(2026, 7, 6, 12),
@@ -407,6 +439,7 @@ async function main() {
 
   await prisma.invoice.create({
     data: {
+      accountId: OWNER,
       number: "INV-002",
       customerId: hartley.id,
       division: "FARM",
@@ -434,6 +467,7 @@ async function main() {
 
   await prisma.invoice.create({
     data: {
+      accountId: OWNER,
       number: "Q-001",
       kind: "QUOTE",
       customerId: acme.id,
@@ -462,6 +496,7 @@ async function main() {
 
   await prisma.mileageLog.create({
     data: {
+      accountId: OWNER,
       date: new Date(2026, 7, 2, 12),
       startLocation: "Farm",
       destination: "Rural King, Springfield",
@@ -474,6 +509,7 @@ async function main() {
   });
   await prisma.mileageLog.create({
     data: {
+      accountId: OWNER,
       date: new Date(2026, 7, 6, 12),
       destination: "Acme Fabrication",
       purpose: "Deliver bracket order",
@@ -488,6 +524,7 @@ async function main() {
     where: { id: "singleton" },
     create: {
       id: "singleton",
+      accountId: OWNER,
       name: "Twin Oaks Farm & Tech",
       addressLine1: "7575 State Highway 134 East",
       city: "Columbia",
@@ -506,6 +543,7 @@ async function main() {
   for (const item of BACKLOG) {
     await prisma.ticket.create({
       data: {
+        accountId: OWNER,
         ref: refOf(item),
         kind: item.kind,
         number: item.number,

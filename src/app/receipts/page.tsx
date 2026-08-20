@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { RECEIPT_STATUS_LABELS, type ReceiptStatus } from "@/lib/domain";
@@ -19,14 +20,17 @@ export default async function ReceiptsPage({
 }: {
   searchParams: Promise<{ tab?: string; saved?: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { tab = "inbox", saved } = await searchParams;
 
-  const where =
-    tab === "inbox"
+  const where = {
+    accountId,
+    ...(tab === "inbox"
       ? { status: "INBOX" }
       : tab === "review"
         ? { status: { in: ["NEEDS_REVIEW", "TAX_UNCERTAIN", "SPLIT_PERSONAL"] } }
-        : {};
+        : {}),
+  };
 
   const [receipts, inboxCount] = await Promise.all([
     prisma.receipt.findMany({
@@ -34,7 +38,7 @@ export default async function ReceiptsPage({
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
-    prisma.receipt.count({ where: { status: "INBOX" } }),
+    prisma.receipt.count({ where: { accountId, status: "INBOX" } }),
   ]);
 
   return (

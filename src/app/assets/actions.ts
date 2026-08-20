@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { parseDateInput } from "@/lib/dates";
 import { parseDollarsToCents } from "@/lib/money";
-import { ASSET_KINDS, ASSET_STATUSES, DIVISIONS, MAINTENANCE_CATEGORIES } from "@/lib/domain";
+import { ALL_DIVISIONS, ASSET_KINDS, ASSET_STATUSES, MAINTENANCE_CATEGORIES } from "@/lib/domain";
 
 function str(v: FormDataEntryValue | null): string | null {
   if (typeof v !== "string") return null;
@@ -25,7 +26,7 @@ function assetDataFromForm(formData: FormData) {
   const division = str(formData.get("division"));
   if (!name) return null;
   if (!kind || !(ASSET_KINDS as readonly string[]).includes(kind)) return null;
-  if (!division || !(DIVISIONS as readonly string[]).includes(division)) return null;
+  if (!division || !(ALL_DIVISIONS as readonly string[]).includes(division)) return null;
 
   const status = str(formData.get("status"));
   const year = num(formData.get("year"));
@@ -52,24 +53,30 @@ function assetDataFromForm(formData: FormData) {
 }
 
 export async function createAsset(formData: FormData) {
+  const accountId = await requireAccountId();
   const data = assetDataFromForm(formData);
   if (!data) redirect("/assets/new?error=missing");
-  const asset = await prisma.asset.create({ data });
+  const asset = await prisma.asset.create({ data: { ...data, accountId } });
   redirect(`/assets/${asset.id}`);
 }
 
 export async function updateAsset(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/assets");
   const data = assetDataFromForm(formData);
   if (!data) redirect(`/assets/${id}/edit?error=missing`);
-  await prisma.asset.update({ where: { id }, data });
+  await prisma.asset.updateMany({ where: { id, accountId }, data });
   redirect(`/assets/${id}`);
 }
 
 export async function addMaintenance(formData: FormData) {
+  const accountId = await requireAccountId();
   const assetId = str(formData.get("assetId"));
   if (!assetId) redirect("/assets");
+  // The asset itself must be this account's — a forged assetId is a no-op.
+  const owned = await prisma.asset.findFirst({ where: { id: assetId, accountId }, select: { id: true } });
+  if (!owned) redirect("/assets");
 
   const category = str(formData.get("category"));
   const description = str(formData.get("description"));
@@ -81,6 +88,7 @@ export async function addMaintenance(formData: FormData) {
 
   await prisma.maintenanceRecord.create({
     data: {
+      accountId,
       assetId,
       date: parseDateInput(formData.get("date")) ?? new Date(),
       hoursAtService,
@@ -95,10 +103,10 @@ export async function addMaintenance(formData: FormData) {
 
   // Service entries double as the machine's hour-meter log.
   if (hoursAtService != null) {
-    const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+    const asset = await prisma.asset.findFirst({ where: { id: assetId, accountId } });
     if (asset && (asset.currentHours == null || hoursAtService > asset.currentHours)) {
-      await prisma.asset.update({
-        where: { id: assetId },
+      await prisma.asset.updateMany({
+        where: { id: assetId, accountId },
         data: { currentHours: hoursAtService },
       });
     }
@@ -108,8 +116,9 @@ export async function addMaintenance(formData: FormData) {
 }
 
 export async function deleteMaintenance(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   const assetId = str(formData.get("assetId"));
-  if (id) await prisma.maintenanceRecord.delete({ where: { id } });
+  if (id) await prisma.maintenanceRecord.deleteMany({ where: { id, accountId } });
   redirect(assetId ? `/assets/${assetId}` : "/assets");
 }

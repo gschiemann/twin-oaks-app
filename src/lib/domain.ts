@@ -2,13 +2,20 @@
 // string fields in the Prisma schema; SQLite has no native enums).
 // Sourced from the Master Build Specification (docs/SPEC.md §§5–11, 25, 27).
 
+// Twin Oaks' own division set. Other accounts (multi-user, 2026-08) carry
+// their own list on BusinessProfile.divisionsCsv — most get just GENERAL,
+// which hides the division picker entirely. ALL_DIVISIONS is the validation
+// superset; DIVISIONS stays the legacy/owner default so nothing changes for
+// the original books.
 export const DIVISIONS = ["FARM", "TECH", "SHARED"] as const;
-export type Division = (typeof DIVISIONS)[number];
+export const ALL_DIVISIONS = ["FARM", "TECH", "SHARED", "GENERAL"] as const;
+export type Division = (typeof ALL_DIVISIONS)[number];
 
 export const DIVISION_LABELS: Record<Division, string> = {
   FARM: "Farm",
   TECH: "Tech",
   SHARED: "Shared",
+  GENERAL: "General",
 };
 
 // Accounting categories — bookkeeping/tax preparation level (SPEC §6).

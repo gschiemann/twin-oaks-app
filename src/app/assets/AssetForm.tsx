@@ -1,12 +1,11 @@
 import {
   ASSET_KINDS,
   ASSET_STATUSES,
-  DIVISIONS,
-  DIVISION_LABELS,
   type Division,
 } from "@/lib/domain";
 import { toDateInputValue } from "@/lib/dates";
 import { btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
+import DivisionField from "@/components/DivisionField";
 
 type Defaults = {
   id?: string;
@@ -33,10 +32,12 @@ export default function AssetForm({
   action,
   submitLabel,
   defaults = {},
+  divisions,
 }: {
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
   defaults?: Defaults;
+  divisions: Division[];
 }) {
   return (
     <form action={action} className="space-y-4">
@@ -103,26 +104,7 @@ export default function AssetForm({
         </div>
       </div>
 
-      <div>
-        <span className={labelCls}>Division *</span>
-        <div className="grid grid-cols-3 gap-2">
-          {DIVISIONS.map((d) => (
-            <label
-              key={d}
-              className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm font-medium text-stone-700 has-checked:border-oak-600 has-checked:bg-oak-50 has-checked:text-oak-800"
-            >
-              <input
-                type="radio"
-                name="division"
-                value={d}
-                defaultChecked={(defaults.division ?? "FARM") === d}
-                className="accent-oak-700"
-              />
-              {DIVISION_LABELS[d as Division]}
-            </label>
-          ))}
-        </div>
-      </div>
+      <DivisionField divisions={divisions} defaultValue={defaults.division ?? "FARM"} />
 
       <div className="grid grid-cols-2 gap-3">
         <div>

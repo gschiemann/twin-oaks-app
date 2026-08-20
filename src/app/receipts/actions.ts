@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { parseDateInput } from "@/lib/dates";
 import { parseDollarsToCents } from "@/lib/money";
 import { saveUpload } from "@/lib/storage";
@@ -16,14 +17,16 @@ function str(v: FormDataEntryValue | null): string | null {
 // SPEC §§3–4: a receipt can be saved instantly (photo → Inbox) and
 // categorized later, so nothing gets lost on a busy day.
 export async function createReceipt(formData: FormData) {
+  const accountId = await requireAccountId();
   const file = formData.get("file");
   let fileMeta: Awaited<ReturnType<typeof saveUpload>> | null = null;
   if (file instanceof File && file.size > 0) {
-    fileMeta = await saveUpload(file);
+    fileMeta = await saveUpload(file, accountId);
   }
 
   const receipt = await prisma.receipt.create({
     data: {
+      accountId,
       status: "INBOX",
       filePath: fileMeta?.storageKey ?? null,
       fileName: fileMeta?.fileName ?? null,
@@ -43,12 +46,13 @@ export async function createReceipt(formData: FormData) {
 }
 
 export async function updateReceipt(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/receipts");
 
   const status = str(formData.get("status"));
-  await prisma.receipt.update({
-    where: { id },
+  await prisma.receipt.updateMany({
+    where: { id, accountId },
     data: {
       vendorName: str(formData.get("vendorName")),
       receiptDate: parseDateInput(formData.get("receiptDate")),
@@ -72,6 +76,7 @@ export async function updateReceipt(formData: FormData) {
 // added after the fact). Originals are permanently stored — receipts are
 // archived, never deleted (SPEC §1).
 export async function attachReceiptFile(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/receipts");
   const file = formData.get("file");
@@ -81,9 +86,9 @@ export async function attachReceiptFile(formData: FormData) {
     redirect(`/receipts/${id}?attach=empty`);
   }
   if (file instanceof File && file.size > 0) {
-    const meta = await saveUpload(file);
-    await prisma.receipt.update({
-      where: { id },
+    const meta = await saveUpload(file, accountId);
+    await prisma.receipt.updateMany({
+      where: { id, accountId },
       data: {
         filePath: meta.storageKey,
         fileName: meta.fileName,

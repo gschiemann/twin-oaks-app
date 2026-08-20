@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
+import { currentAccountId, OWNER_ACCOUNT_ID } from "@/lib/auth";
+import { getBusinessProfile } from "@/lib/business";
 import { ensureSchema } from "@/lib/ensure-schema";
 
 export const metadata: Metadata = {
@@ -22,10 +24,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // never throws — pages surface a friendly diagnostic if the DB is down).
   await ensureSchema();
 
+  // Non-owner accounts see their own business name in the header instead of
+  // the Twin Oaks lockup. Never throws — chrome must render even if the
+  // database is down (brandName just stays null → default logo).
+  let brandName: string | null = null;
+  try {
+    const accountId = await currentAccountId();
+    if (accountId && accountId !== OWNER_ACCOUNT_ID) {
+      brandName = (await getBusinessProfile(accountId)).name;
+    }
+  } catch {
+    brandName = null;
+  }
+
   return (
     <html lang="en">
       <body className="min-h-screen bg-oak-50 text-[#2f2b25] antialiased">
-        <AppHeader />
+        <AppHeader brandName={brandName} />
         <main className="mx-auto max-w-2xl px-4 pt-4 pb-32 print:max-w-none print:p-0">{children}</main>
         <div className="print:hidden">
           <BottomNav />

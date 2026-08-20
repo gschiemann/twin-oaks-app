@@ -7,6 +7,7 @@ import {
   type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { prisma } from "@/lib/db";
+import { currentAccountId } from "@/lib/auth";
 import { relyingParty, setChallenge, takeChallenge } from "@/lib/passkey";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +18,11 @@ const USER_ID = new TextEncoder().encode("twin-oaks-owner");
 const USER_NAME = "Twin Oaks owner";
 
 export async function GET() {
+  const accountId = await currentAccountId();
+  if (!accountId) return Response.json({ ok: false, error: "Sign in first." }, { status: 401 });
   const { rpID } = await relyingParty();
   const existing = await prisma.passkey.findMany({
+    where: { accountId },
     select: { credentialId: true, transports: true },
   });
 
@@ -41,6 +45,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const accountId = await currentAccountId();
+  if (!accountId) return Response.json({ ok: false, error: "Sign in first." }, { status: 401 });
   const expectedChallenge = await takeChallenge();
   if (!expectedChallenge) {
     return Response.json({ ok: false, error: "That took too long — try again." }, { status: 400 });
@@ -75,6 +81,7 @@ export async function POST(req: Request) {
 
     await prisma.passkey.create({
       data: {
+        accountId,
         credentialId: credential.id,
         publicKey: Buffer.from(credential.publicKey).toString("base64url"),
         counter: credential.counter,

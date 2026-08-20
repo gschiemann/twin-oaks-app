@@ -17,18 +17,39 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Multi-user (2026-08): every business using this deployment is an Account.
+// The original Twin Oaks books live under the fixed id "owner", which is
+// what the legacy APP_PASSWORD login resolves to. Data tables carry a plain
+// `accountId` column (no relation on purpose — keeps the sweep mechanical
+// and the queries explicit; a missed filter fails loudly in review, not
+// silently across tenants).
+model Account {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  // scrypt hash ("s1$salt$hash"); empty string = env-password-only account
+  // (the owner), which the email login always refuses.
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
 model Vendor {
   id        String    @id @default(cuid())
-  name      String    @unique
+  accountId String
+  name      String
   notes     String?
   createdAt DateTime  @default(now())
   expenses  Expense[]
+
+  @@unique([accountId, name])
+  @@index([accountId])
 }
 
 // A receipt is first-class: it can exist before it is categorized (the Inbox),
 // and it permanently stores the original image/PDF once attached.
 model Receipt {
   id            String    @id @default(cuid())
+  accountId     String
   status        String    @default("INBOX") // see RECEIPT_STATUSES in src/lib/domain.ts
   // UPLOAD (camera/file picker) | EMAIL (forwarded to the inbound address)
   source        String    @default("UPLOAD")
@@ -52,10 +73,12 @@ model Receipt {
 
   @@index([status])
   @@index([expenseId])
+  @@index([accountId])
 }
 
 model Expense {
   id                 String              @id @default(cuid())
+  accountId          String
   date               DateTime
   vendorId           String?
   vendor             Vendor?             @relation(fields: [vendorId], references: [id], onDelete: SetNull)
@@ -86,10 +109,12 @@ model Expense {
   @@index([accountingCategory])
   @@index([taxStatus])
   @@index([assetId])
+  @@index([accountId])
 }
 
 model Income {
   id            String   @id @default(cuid())
+  accountId     String
   date          DateTime
   source        String? // customer/buyer name (free-form until Customers arrive in V2)
   description   String
@@ -104,11 +129,13 @@ model Income {
 
   @@index([date])
   @@index([taxYear, division])
+  @@index([accountId])
 }
 
 // Equipment / capital asset profile: tractors, printers, trailers, buildings…
 model Asset {
   id                 String              @id @default(cuid())
+  accountId          String
   name               String // "Tractor #1", "Bambu H2D #1"
   assetTag           String? // internal asset ID
   kind               String // see ASSET_KINDS
@@ -134,6 +161,7 @@ model Asset {
 
   @@index([kind])
   @@index([division])
+  @@index([accountId])
 }
 
 // Receipt/document originals stored IN the database. This is the automatic
@@ -144,17 +172,27 @@ model Asset {
 // When a Blob store IS connected, new files go there instead.
 model StoredFile {
   id        String   @id @default(cuid())
+  accountId String
   fileName  String
   mimeType  String
   size      Int
   data      Bytes
   createdAt DateTime @default(now())
+
+  @@index([accountId])
 }
 
 // FR-007: entered once in Settings, reused on every customer-facing
 // document. Single row (id is always "singleton").
 model BusinessProfile {
-  id                    String   @id @default("singleton")
+  id                    String   @id @default(cuid())
+  // One profile per account. The pre-multi-user row keeps its historical
+  // id "singleton" and belongs to the owner account.
+  accountId             String   @unique
+  // Comma-separated division set for this business. Null = the legacy
+  // FARM,TECH,SHARED trio (the owner); new accounts get "GENERAL", which
+  // hides the division picker across the app.
+  divisionsCsv          String?
   name                  String   @default("Twin Oaks Farm & Tech")
   addressLine1          String?
   addressLine2          String?
@@ -174,7 +212,8 @@ model BusinessProfile {
 // (BUG-001, FR-002, UI-003, TAX-004).
 model Ticket {
   id             String   @id @default(cuid())
-  ref            String   @unique // "BUG-001"
+  accountId      String
+  ref            String // "BUG-001" — unique per account
   kind           String // BUG | FR | UI | TAX
   number         Int
   title          String
@@ -186,8 +225,10 @@ model Ticket {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  @@unique([accountId, ref])
   @@index([kind, number])
   @@index([status])
+  @@index([accountId])
 }
 
 // Face ID / Touch ID sign-in (SPEC §32). A passkey is an ADDITIVE second
@@ -195,19 +236,23 @@ model Ticket {
 // device can never lock the owner out of their own books.
 model Passkey {
   id           String   @id @default(cuid())
-  credentialId String   @unique // base64url
+  accountId    String
+  credentialId String   @unique // base64url (globally unique by WebAuthn design)
   publicKey    String // base64url COSE key
   counter      Int      @default(0)
   transports   String? // comma-separated hints from the authenticator
   label        String // "Greg's iPhone"
   createdAt    DateTime @default(now())
   lastUsedAt   DateTime?
+
+  @@index([accountId])
 }
 
 // ————— V2: the revenue loop (SPEC §§14–17) + mileage (§19) —————
 
 model Customer {
   id        String    @id @default(cuid())
+  accountId String
   name      String
   company   String?
   phone     String?
@@ -226,11 +271,14 @@ model Customer {
   payments  Payment[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  @@index([accountId])
 }
 
 model Invoice {
   id            String        @id @default(cuid())
-  number        String        @unique // "INV-001" / "Q-001"
+  accountId     String
+  number        String // "INV-001" / "Q-001" — unique per account
   // QUOTE | INVOICE — quotes share the whole machinery (lines, print view)
   // but take no payments; converting a quote creates a fresh invoice and
   // stamps convertedToInvoiceId here (derived status: ACCEPTED).
@@ -265,9 +313,11 @@ model Invoice {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  @@unique([accountId, number])
   @@index([customerId])
   @@index([status])
   @@index([taxYear])
+  @@index([accountId])
 }
 
 model InvoiceLine {
@@ -286,6 +336,7 @@ model InvoiceLine {
 
 model Payment {
   id          String    @id @default(cuid())
+  accountId   String
   invoiceId   String
   invoice     Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   customerId  String?
@@ -300,12 +351,14 @@ model Payment {
   updatedAt   DateTime  @updatedAt
 
   @@index([invoiceId])
+  @@index([accountId])
 }
 
 // Mileage (SPEC §19). Tax-safety: we record miles; the deduction rate and
 // treatment are the accountant's call.
 model MileageLog {
   id             String   @id @default(cuid())
+  accountId      String
   date           DateTime
   startLocation  String?
   destination    String
@@ -323,10 +376,12 @@ model MileageLog {
 
   @@index([date])
   @@index([taxYear])
+  @@index([accountId])
 }
 
 model MaintenanceRecord {
   id             String   @id @default(cuid())
+  accountId      String
   assetId        String
   asset          Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
   date           DateTime
@@ -343,4 +398,5 @@ model MaintenanceRecord {
   updatedAt      DateTime @updatedAt
 
   @@index([assetId, date])
+  @@index([accountId])
 }

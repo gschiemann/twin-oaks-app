@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { Card, Chip, PageHeader, StatCard, btnPrimaryCls, btnSecondaryCls } from "@/components/ui";
@@ -32,10 +33,11 @@ export default async function CustomerDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { id } = await params;
   const { error } = await searchParams;
-  const customer = await prisma.customer.findUnique({
-    where: { id },
+  const customer = await prisma.customer.findFirst({
+    where: { id, accountId },
     include: {
       invoices: {
         orderBy: { issueDate: "desc" },

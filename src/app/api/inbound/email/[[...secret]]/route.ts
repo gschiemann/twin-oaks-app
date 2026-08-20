@@ -19,6 +19,10 @@
 
 import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
+// The inbound address + secret are the OWNER's configuration, so everything
+// this webhook creates lands in the owner account. Per-account inbound
+// addresses are a future feature.
+import { OWNER_ACCOUNT_ID } from "@/lib/session";
 import { saveBuffer } from "@/lib/storage";
 import {
   extractReceiptHints,
@@ -110,6 +114,7 @@ export async function POST(
   const since = new Date(Date.now() - 15 * 60 * 1000);
   const duplicate = await prisma.receipt.findFirst({
     where: {
+      accountId: OWNER_ACCOUNT_ID,
       source: "EMAIL",
       emailFrom: email.from || null,
       emailSubject: email.subject || null,
@@ -158,13 +163,14 @@ export async function POST(
   for (const doc of documents) {
     let stored;
     try {
-      stored = await saveBuffer(doc.bytes, doc.name, doc.type);
+      stored = await saveBuffer(doc.bytes, doc.name, doc.type, OWNER_ACCOUNT_ID);
     } catch (e) {
       console.error("[inbound-email] failed to store document:", e);
       continue;
     }
     const receipt = await prisma.receipt.create({
       data: {
+        accountId: OWNER_ACCOUNT_ID,
         status: "INBOX",
         source: "EMAIL",
         emailFrom: email.from || null,

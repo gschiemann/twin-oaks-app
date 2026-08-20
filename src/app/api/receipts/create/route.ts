@@ -5,6 +5,7 @@
 // Behind the login gate, like everything else that touches records.
 
 import { prisma } from "@/lib/db";
+import { currentAccountId } from "@/lib/auth";
 import { StorageNotConnectedError, saveUpload } from "@/lib/storage";
 import { parseDateInput } from "@/lib/dates";
 import { parseDollarsToCents } from "@/lib/money";
@@ -19,6 +20,13 @@ function str(v: FormDataEntryValue | string | null | undefined): string | null {
 }
 
 export async function POST(req: Request) {
+  const accountId = await currentAccountId();
+  if (!accountId) {
+    return Response.json(
+      { ok: false, error: "Your sign-in expired — refresh and sign in again." },
+      { status: 401 },
+    );
+  }
   const contentType = req.headers.get("content-type") ?? "";
   const contentLength = req.headers.get("content-length") ?? "?";
 
@@ -94,7 +102,7 @@ export async function POST(req: Request) {
   // reported as a transfer failure — it sends the operator to the wrong fix.
   if (upload) {
     try {
-      const stored = await saveUpload(upload);
+      const stored = await saveUpload(upload, accountId);
       filePath = stored.storageKey;
       fileName = stored.fileName;
       mimeType = stored.mimeType;
@@ -118,6 +126,7 @@ export async function POST(req: Request) {
   try {
     const receipt = await prisma.receipt.create({
       data: {
+        accountId,
         status: "INBOX",
         source: "UPLOAD",
         filePath,

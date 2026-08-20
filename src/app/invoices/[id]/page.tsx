@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate, toDateInputValue } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { DIVISION_LABELS, PAYMENT_METHODS, type Division } from "@/lib/domain";
@@ -49,10 +50,11 @@ export default async function InvoiceDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { id } = await params;
   const { error } = await searchParams;
-  const invoice = await prisma.invoice.findUnique({
-    where: { id },
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, accountId },
     include: {
       customer: true,
       lines: { orderBy: { sortOrder: "asc" } },
@@ -67,8 +69,8 @@ export default async function InvoiceDetailPage({
   const isQuote = invoice.kind === "QUOTE";
   const taxableCents = invoice.lines.reduce((s, l) => s + (l.taxable ? l.totalCents : 0), 0);
   const acceptedInvoice = invoice.convertedToInvoiceId
-    ? await prisma.invoice.findUnique({
-        where: { id: invoice.convertedToInvoiceId },
+    ? await prisma.invoice.findFirst({
+        where: { id: invoice.convertedToInvoiceId, accountId },
         select: { id: true, number: true },
       })
     : null;

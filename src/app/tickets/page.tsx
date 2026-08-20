@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { ensureBacklogTickets } from "@/lib/backlog";
 import { formatDate } from "@/lib/dates";
 import { Card, Chip, EmptyState, PageHeader, StatCard, btnPrimaryCls } from "@/components/ui";
@@ -40,6 +41,7 @@ export default async function TicketsPage({
   // The written backlog lives in code (src/lib/backlog.ts); anything missing
   // from this tracker is created here, since the seed script only ever runs
   // against a local database. Existing rows are never touched.
+  const accountId = await requireAccountId();
   await ensureBacklogTickets();
 
   const { status: statusParam, kind: kindParam } = await searchParams;
@@ -51,6 +53,7 @@ export default async function TicketsPage({
     kindParam && (TICKET_KINDS as readonly string[]).includes(kindParam) ? kindParam : "all";
 
   const where = {
+    accountId,
     ...(status !== "all" ? { status } : {}),
     ...(kind !== "all" ? { kind } : {}),
   };
@@ -59,8 +62,8 @@ export default async function TicketsPage({
   // not of whatever filter happens to be on.
   const [tickets, openCount, completeCount] = await Promise.all([
     prisma.ticket.findMany({ where, orderBy: { createdAt: "desc" }, take: 200 }),
-    prisma.ticket.count({ where: { status: { not: "COMPLETE" } } }),
-    prisma.ticket.count({ where: { status: "COMPLETE" } }),
+    prisma.ticket.count({ where: { accountId, status: { not: "COMPLETE" } } }),
+    prisma.ticket.count({ where: { accountId, status: "COMPLETE" } }),
   ]);
 
   // Newest first, but finished work sinks to the bottom.

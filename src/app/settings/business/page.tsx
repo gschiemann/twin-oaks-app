@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAccountId } from "@/lib/auth";
 import { getBusinessProfile } from "@/lib/business";
 import { fileSrc } from "@/lib/storage";
 import { Card, PageHeader, btnPrimaryCls, btnSecondaryCls, inputCls, labelCls } from "@/components/ui";
@@ -13,7 +14,8 @@ export default async function BusinessProfilePage({
   searchParams: Promise<{ saved?: string }>;
 }) {
   const { saved } = await searchParams;
-  const p = await getBusinessProfile();
+  const accountId = await requireAccountId();
+  const p = await getBusinessProfile(accountId);
 
   return (
     <div>

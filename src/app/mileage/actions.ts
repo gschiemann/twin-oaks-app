@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { parseDateInput, taxYearOf } from "@/lib/dates";
 
 function str(v: FormDataEntryValue | null): string | null {
@@ -18,6 +19,7 @@ function num(v: FormDataEntryValue | null): number | null {
 }
 
 export async function createMileage(formData: FormData) {
+  const accountId = await requireAccountId();
   const date = parseDateInput(formData.get("date")) ?? new Date();
   const destination = str(formData.get("destination"));
   const purpose = str(formData.get("purpose"));
@@ -39,6 +41,7 @@ export async function createMileage(formData: FormData) {
 
   await prisma.mileageLog.create({
     data: {
+      accountId,
       date,
       startLocation: str(formData.get("startLocation")),
       destination,
@@ -55,10 +58,10 @@ export async function createMileage(formData: FormData) {
 
   // Trips double as the vehicle's odometer log (mirrors addMaintenance → currentHours).
   if (vehicleAssetId != null && endOdometer != null) {
-    const asset = await prisma.asset.findUnique({ where: { id: vehicleAssetId } });
+    const asset = await prisma.asset.findFirst({ where: { id: vehicleAssetId, accountId } });
     if (asset && (asset.currentMileage == null || endOdometer > asset.currentMileage)) {
-      await prisma.asset.update({
-        where: { id: vehicleAssetId },
+      await prisma.asset.updateMany({
+        where: { id: vehicleAssetId, accountId },
         data: { currentMileage: endOdometer },
       });
     }
@@ -68,7 +71,8 @@ export async function createMileage(formData: FormData) {
 }
 
 export async function deleteMileage(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
-  if (id) await prisma.mileageLog.delete({ where: { id } });
+  if (id) await prisma.mileageLog.deleteMany({ where: { id, accountId } });
   redirect("/mileage");
 }

@@ -333,6 +333,66 @@ const DDL: string[] = [
   `DO $$ BEGIN
     ALTER TABLE "MaintenanceRecord" ADD CONSTRAINT "MaintenanceRecord_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense"("id") ON DELETE SET NULL ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+
+  // ————— V4.0: multi-user accounts —————
+  // Every pre-existing row belongs to the fixed 'owner' account (the original
+  // Twin Oaks books) — the DEFAULT on each ADD COLUMN does the backfill in
+  // the same idempotent statement.
+  `CREATE TABLE IF NOT EXISTS "Account" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "passwordHash" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "Account_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Account_email_key" ON "Account"("email")`,
+  `INSERT INTO "Account" ("id", "email", "name", "passwordHash")
+    VALUES ('owner', 'twinoaksfarmandtech@gmail.com', 'Twin Oaks Farm & Tech', '')
+    ON CONFLICT ("id") DO NOTHING`,
+
+  `ALTER TABLE "Vendor" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "Receipt" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "Expense" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "Income" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "Asset" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "MaintenanceRecord" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "StoredFile" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "BusinessProfile" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "BusinessProfile" ADD COLUMN IF NOT EXISTS "divisionsCsv" TEXT`,
+  `ALTER TABLE "Ticket" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `ALTER TABLE "MileageLog" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+
+  // Global uniques become per-account (a second business starts its own
+  // INV-001 and its own vendor list).
+  `DROP INDEX IF EXISTS "Vendor_name_key"`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Vendor_accountId_name_key" ON "Vendor"("accountId", "name")`,
+  `DROP INDEX IF EXISTS "Invoice_number_key"`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Invoice_accountId_number_key" ON "Invoice"("accountId", "number")`,
+  `DROP INDEX IF EXISTS "Ticket_ref_key"`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Ticket_accountId_ref_key" ON "Ticket"("accountId", "ref")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "BusinessProfile_accountId_key" ON "BusinessProfile"("accountId")`,
+
+  `CREATE INDEX IF NOT EXISTS "Vendor_accountId_idx" ON "Vendor"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "Receipt_accountId_idx" ON "Receipt"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "Expense_accountId_idx" ON "Expense"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "Income_accountId_idx" ON "Income"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "Asset_accountId_idx" ON "Asset"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "MaintenanceRecord_accountId_idx" ON "MaintenanceRecord"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "StoredFile_accountId_idx" ON "StoredFile"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "Ticket_accountId_idx" ON "Ticket"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "Customer_accountId_idx" ON "Customer"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "Invoice_accountId_idx" ON "Invoice"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "Payment_accountId_idx" ON "Payment"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "MileageLog_accountId_idx" ON "MileageLog"("accountId")`,
+
+  // LAST on purpose: the probe targets this column, so its presence proves
+  // the whole multi-user block ran.
+  `ALTER TABLE "Passkey" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
+  `CREATE INDEX IF NOT EXISTS "Passkey_accountId_idx" ON "Passkey"("accountId")`,
 ];
 
 export type DbStatus =
@@ -361,7 +421,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
     // Probe the NEWEST schema element (table OR column) — if an older
     // deploy's schema is present but anything newer is missing, the
     // idempotent DDL below fills the gap.
-    await prisma.$queryRawUnsafe(`SELECT "id" FROM "StoredFile" LIMIT 1`);
+    await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "Passkey" LIMIT 1`);
     return { ok: true }; // schema already present
   } catch (probeErr) {
     // Something missing (or connection issue) — attempt to apply the schema.
@@ -369,7 +429,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
       for (const stmt of DDL) {
         await prisma.$executeRawUnsafe(stmt);
       }
-      await prisma.$queryRawUnsafe(`SELECT "id" FROM "StoredFile" LIMIT 1`);
+      await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "Passkey" LIMIT 1`);
       console.log("[twin-oaks] database schema applied by self-heal");
       return { ok: true };
     } catch (healErr) {

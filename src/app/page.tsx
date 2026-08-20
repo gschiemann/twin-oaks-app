@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { OWNER_ACCOUNT_ID, requireAccountId } from "@/lib/auth";
+import { getBusinessProfile } from "@/lib/business";
 import { formatCents } from "@/lib/money";
 import { formatDate, startOfMonth, startOfYear } from "@/lib/dates";
 import { Card, Chip, PageHeader, StatCard, divisionTone } from "@/components/ui";
@@ -8,8 +10,8 @@ import { ensureSchema } from "@/lib/ensure-schema";
 
 export const dynamic = "force-dynamic";
 
-async function sums(model: "expense" | "income", gte: Date, division?: string) {
-  const where = { date: { gte }, ...(division ? { division } : {}) };
+async function sums(accountId: string, model: "expense" | "income", gte: Date, division?: string) {
+  const where = { accountId, date: { gte }, ...(division ? { division } : {}) };
   const agg =
     model === "expense"
       ? await prisma.expense.aggregate({ where, _sum: { amountCents: true } })
@@ -47,6 +49,9 @@ export default async function DashboardPage() {
     );
   }
 
+  const accountId = await requireAccountId();
+  const isOwner = accountId === OWNER_ACCOUNT_ID;
+  const profile = await getBusinessProfile(accountId);
   const monthStart = startOfMonth();
   const yearStart = startOfYear();
 
@@ -66,21 +71,21 @@ export default async function DashboardPage() {
     recentIncome,
     openInvoices,
   ] = await Promise.all([
-    sums("expense", monthStart),
-    sums("income", monthStart),
-    sums("expense", yearStart),
-    sums("income", yearStart),
-    sums("expense", yearStart, "FARM"),
-    sums("income", yearStart, "FARM"),
-    sums("expense", yearStart, "TECH"),
-    sums("income", yearStart, "TECH"),
-    prisma.receipt.count({ where: { status: "INBOX" } }),
-    prisma.expense.count({ where: { taxStatus: "NEEDS_REVIEW" } }),
-    prisma.expense.count({ where: { receipts: { none: {} } } }),
-    prisma.expense.findMany({ orderBy: { date: "desc" }, take: 5 }),
-    prisma.income.findMany({ orderBy: { date: "desc" }, take: 3 }),
+    sums(accountId, "expense", monthStart),
+    sums(accountId, "income", monthStart),
+    sums(accountId, "expense", yearStart),
+    sums(accountId, "income", yearStart),
+    sums(accountId, "expense", yearStart, "FARM"),
+    sums(accountId, "income", yearStart, "FARM"),
+    sums(accountId, "expense", yearStart, "TECH"),
+    sums(accountId, "income", yearStart, "TECH"),
+    prisma.receipt.count({ where: { accountId, status: "INBOX" } }),
+    prisma.expense.count({ where: { accountId, taxStatus: "NEEDS_REVIEW" } }),
+    prisma.expense.count({ where: { accountId, receipts: { none: {} } } }),
+    prisma.expense.findMany({ where: { accountId }, orderBy: { date: "desc" }, take: 5 }),
+    prisma.income.findMany({ where: { accountId }, orderBy: { date: "desc" }, take: 3 }),
     prisma.invoice.findMany({
-      where: { status: "SENT", kind: "INVOICE" },
+      where: { accountId, status: "SENT", kind: "INVOICE" },
       include: { payments: { select: { amountCents: true } } },
     }),
   ]);
@@ -102,7 +107,7 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Twin Oaks Farm & Tech" sub={monthLabel} />
+      <PageHeader title={profile.name} sub={monthLabel} />
 
       {inboxCount > 0 ? (
         <Link href="/receipts" className="mb-4 block">
@@ -167,6 +172,7 @@ export default async function DashboardPage() {
         </Link>
       ) : null}
 
+      {isOwner ? (
       <div className="mb-4 grid grid-cols-2 gap-2">
         <Card>
           <div className="mb-1 flex items-center gap-1.5">
@@ -217,6 +223,7 @@ export default async function DashboardPage() {
           <p className="mt-2 text-xs text-stone-400">Print jobs & filament arrive in V4.</p>
         </Card>
       </div>
+      ) : null}
 
       {reviewCount > 0 || missingReceiptCount > 0 ? (
         <Card className="mb-4">

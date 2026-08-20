@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { Card, PageHeader, btnSecondaryCls } from "@/components/ui";
 import PasskeyEnroll from "@/components/PasskeyEnroll";
@@ -8,7 +9,11 @@ import { deletePasskey } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function PasskeysPage() {
-  const passkeys = await prisma.passkey.findMany({ orderBy: { createdAt: "desc" } });
+  const accountId = await requireAccountId();
+  const passkeys = await prisma.passkey.findMany({
+    where: { accountId },
+    orderBy: { createdAt: "desc" },
+  });
 
   return (
     <div>

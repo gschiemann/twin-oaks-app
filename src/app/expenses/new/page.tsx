@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
+import { getBusinessProfile } from "@/lib/business";
 import { Card, PageHeader } from "@/components/ui";
 import { ReceiptThumb } from "../../receipts/receipt-bits";
 import { formatCents } from "@/lib/money";
@@ -12,18 +14,20 @@ export default async function NewExpensePage({
 }: {
   searchParams: Promise<{ fromReceipt?: string; assetId?: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { fromReceipt, assetId } = await searchParams;
 
-  const [vendors, assets, receipt] = await Promise.all([
-    prisma.vendor.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+  const [vendors, assets, receipt, profile] = await Promise.all([
+    prisma.vendor.findMany({ where: { accountId }, orderBy: { name: "asc" }, select: { name: true } }),
     prisma.asset.findMany({
-      where: { status: "ACTIVE" },
+      where: { accountId, status: "ACTIVE" },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
     fromReceipt
-      ? prisma.receipt.findUnique({ where: { id: fromReceipt } })
+      ? prisma.receipt.findFirst({ where: { id: fromReceipt, accountId } })
       : Promise.resolve(null),
+    getBusinessProfile(accountId),
   ]);
 
   return (
@@ -51,6 +55,7 @@ export default async function NewExpensePage({
           submitLabel="Save expense"
           vendors={vendors.map((v) => v.name)}
           assets={assets}
+          divisions={profile.divisions}
           fromReceiptId={receipt?.id}
           defaults={{
             vendorName: receipt?.vendorName,

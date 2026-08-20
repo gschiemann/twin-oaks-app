@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { Card, Chip, EmptyState, PageHeader, StatCard, btnPrimaryCls } from "@/components/ui";
@@ -17,12 +18,13 @@ export default async function InvoicesPage({
 }: {
   searchParams: Promise<{ kind?: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { kind: kindParam } = await searchParams;
   const kind = kindParam === "QUOTE" ? "QUOTE" : "INVOICE";
   const isQuotes = kind === "QUOTE";
 
   const invoices = await prisma.invoice.findMany({
-    where: { kind },
+    where: { accountId, kind },
     orderBy: { createdAt: "desc" },
     include: { customer: true, payments: { select: { amountCents: true } } },
   });

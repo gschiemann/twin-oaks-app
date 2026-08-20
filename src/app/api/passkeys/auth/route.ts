@@ -13,7 +13,7 @@ import {
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { relyingParty, setChallenge, takeChallenge } from "@/lib/passkey";
-import { SESSION_COOKIE, sessionTokenFor } from "@/lib/session";
+import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, createSessionValue } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -99,13 +99,7 @@ export async function POST(req: Request) {
     });
 
     const store = await cookies();
-    store.set(SESSION_COOKIE, await sessionTokenFor(password), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30,
-      path: "/",
-    });
+    store.set(SESSION_COOKIE, await createSessionValue(stored.accountId), SESSION_COOKIE_OPTIONS);
 
     return Response.json({ ok: true });
   } catch (e) {

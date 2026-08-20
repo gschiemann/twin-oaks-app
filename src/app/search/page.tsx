@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { Card, PageHeader, inputCls } from "@/components/ui";
@@ -116,6 +117,7 @@ export default async function SearchPage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { q } = await searchParams;
   const now = new Date();
   const terms = (q ?? "")
@@ -130,43 +132,43 @@ export default async function SearchPage({
       ? [[], [], [], [], [], [], [], []]
       : await Promise.all([
           prisma.expense.findMany({
-            where: whereFor(terms, EXPENSE_FIELDS),
+            where: { AND: [{ accountId }, whereFor(terms, EXPENSE_FIELDS)] },
             take: 25,
             orderBy: { date: "desc" },
           }),
           prisma.receipt.findMany({
-            where: whereFor(terms, RECEIPT_FIELDS),
+            where: { AND: [{ accountId }, whereFor(terms, RECEIPT_FIELDS)] },
             take: 25,
             orderBy: { createdAt: "desc" },
           }),
           prisma.asset.findMany({
-            where: whereFor(terms, ASSET_FIELDS),
+            where: { AND: [{ accountId }, whereFor(terms, ASSET_FIELDS)] },
             take: 25,
           }),
           prisma.income.findMany({
-            where: whereFor(terms, INCOME_FIELDS),
+            where: { AND: [{ accountId }, whereFor(terms, INCOME_FIELDS)] },
             take: 25,
             orderBy: { date: "desc" },
           }),
           prisma.maintenanceRecord.findMany({
-            where: whereFor(terms, MAINTENANCE_FIELDS),
+            where: { AND: [{ accountId }, whereFor(terms, MAINTENANCE_FIELDS)] },
             include: { asset: { select: { id: true, name: true } } },
             take: 25,
             orderBy: { date: "desc" },
           }),
           prisma.customer.findMany({
-            where: whereFor(terms, CUSTOMER_FIELDS),
+            where: { AND: [{ accountId }, whereFor(terms, CUSTOMER_FIELDS)] },
             take: 25,
             orderBy: { name: "asc" },
           }),
           prisma.invoice.findMany({
-            where: whereFor(terms, INVOICE_FIELDS),
+            where: { AND: [{ accountId }, whereFor(terms, INVOICE_FIELDS)] },
             include: { customer: { select: { name: true } } },
             take: 25,
             orderBy: { issueDate: "desc" },
           }),
           prisma.mileageLog.findMany({
-            where: whereFor(terms, MILEAGE_FIELDS),
+            where: { AND: [{ accountId }, whereFor(terms, MILEAGE_FIELDS)] },
             take: 25,
             orderBy: { date: "desc" },
           }),

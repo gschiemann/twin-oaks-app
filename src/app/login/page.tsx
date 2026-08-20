@@ -1,8 +1,9 @@
-import { Card, btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
+import Link from "next/link";
+import { Card, btnPrimaryCls, btnSecondaryCls, inputCls, labelCls } from "@/components/ui";
 import PasskeySignIn from "@/components/PasskeySignIn";
 import { prisma } from "@/lib/db";
 import { ensureSchema } from "@/lib/ensure-schema";
-import { login } from "./actions";
+import { login, loginWithEmail } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export default async function LoginPage({
               autoComplete="current-password"
               className={inputCls}
             />
-            {error ? (
+            {error === "1" ? (
               <p className="mt-1 text-sm font-medium text-red-600">
                 Wrong password — try again.
               </p>
@@ -61,9 +62,55 @@ export default async function LoginPage({
           </button>
         </form>
       </Card>
-      <p className="mt-4 text-center text-xs text-stone-400">
-        30-day session on this device. Face ID / passkeys planned.
-      </p>
+      <div className="my-5 flex items-center gap-3 text-xs text-stone-400">
+        <span className="h-px flex-1 bg-stone-200" />
+        or with an email account
+        <span className="h-px flex-1 bg-stone-200" />
+      </div>
+
+      <Card>
+        <form action={loginWithEmail} className="space-y-4">
+          <div>
+            <label className={labelCls} htmlFor="email">
+              Email
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="epassword">
+              Password
+            </label>
+            <input
+              id="epassword"
+              name="epassword"
+              type="password"
+              required
+              autoComplete="current-password"
+              className={inputCls}
+            />
+            {error === "email" ? (
+              <p className="mt-1 text-sm font-medium text-red-600">
+                Wrong email or password — try again.
+              </p>
+            ) : null}
+          </div>
+          <button type="submit" className={`${btnSecondaryCls} w-full`}>
+            Sign in with email
+          </button>
+        </form>
+      </Card>
+
+      <Link href="/signup" className="mt-4 block text-center text-sm font-semibold text-oak-700">
+        New here? Create an account →
+      </Link>
+      <p className="mt-3 text-center text-xs text-stone-400">30-day session on this device.</p>
     </div>
   );
 }

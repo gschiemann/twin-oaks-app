@@ -7,6 +7,7 @@
 // stay in agreement without ever overwriting edits they have made.
 
 import { prisma } from "@/lib/db";
+import { OWNER_ACCOUNT_ID } from "@/lib/session";
 
 export type BacklogItem = {
   kind: "BUG" | "FR" | "UI" | "TAX";
@@ -103,6 +104,17 @@ export const BACKLOG: BacklogItem[] = [
       "Done: photo/PDF upload (see BUG-002), forwarded-email import with vendor/date/total/tax/number extraction, original always stored, duplicate suppression on email, assign-to-asset on the expense. NEW in v3.5: picking a file on Add receipt reads it and pre-fills vendor/date/total/tax/receipt# for review — PDFs with a text layer are read for free on the spot; photos and scanned PDFs are read by AI once an Anthropic API key is added to the deployment (until then a note says so). Open: line-item and shipping extraction, category suggestion from vendor history, drag-and-drop on desktop, bank CSV import and matching.",
   },
   {
+    kind: "FR",
+    number: 8,
+    title: "Multi-user accounts",
+    description:
+      "Let other people run their own business on the same app — sign up with email and password, keep every account's records fully separate, and generalize the interface (no Farm/Tech divisions for a service business). The original Twin Oaks password sign-in stays exactly as it was.",
+    priority: "HIGH",
+    status: "READY_FOR_TESTING",
+    devNotes:
+      "Shipped in v4.0. Every table carries an accountId and every query filters on it; existing data belongs to the owner account, which the classic password (and existing sessions) still open. New accounts sign up at /signup, get their own business profile, invoice numbering (their own INV-001), vendors, tracker, and a single 'General' division so the Farm/Tech pickers disappear. Printed documents use their business name, with no Twin Oaks logo unless they upload one. Sign-ups can be closed later with ALLOW_SIGNUPS=false.",
+  },
+  {
     kind: "UI",
     number: 1,
     title: "Date and Total fields overlapped on iPhone",
@@ -141,13 +153,19 @@ declare global {
 export function ensureBacklogTickets(): Promise<void> {
   if (!globalThis.__twinOaksBacklogSeeded) {
     globalThis.__twinOaksBacklogSeeded = (async () => {
-      const existing = await prisma.ticket.findMany({ select: { ref: true } });
+      // The written backlog is the OWNER's dev tracker — other accounts start
+      // with an empty tracker of their own.
+      const existing = await prisma.ticket.findMany({
+        where: { accountId: OWNER_ACCOUNT_ID },
+        select: { ref: true },
+      });
       const have = new Set(existing.map((t) => t.ref));
       const missing = BACKLOG.filter((item) => !have.has(refOf(item)));
       if (missing.length === 0) return;
 
       await prisma.ticket.createMany({
         data: missing.map((item) => ({
+          accountId: OWNER_ACCOUNT_ID,
           ref: refOf(item),
           kind: item.kind,
           number: item.number,

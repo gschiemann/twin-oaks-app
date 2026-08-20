@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate, startOfYear, toDateInputValue } from "@/lib/dates";
 import { Card, PageHeader, StatCard, btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
 import { createMileage, deleteMileage } from "./actions";
@@ -14,18 +15,20 @@ export default async function MileagePage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { error } = await searchParams;
   const yearStart = startOfYear();
 
   const [trips, vehicles, ytd] = await Promise.all([
     prisma.mileageLog.findMany({
+      where: { accountId },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: 200,
       include: { vehicle: true },
     }),
-    prisma.asset.findMany({ orderBy: { name: "asc" } }),
+    prisma.asset.findMany({ where: { accountId }, orderBy: { name: "asc" } }),
     prisma.mileageLog.aggregate({
-      where: { date: { gte: yearStart } },
+      where: { accountId, date: { gte: yearStart } },
       _sum: { miles: true },
       _count: true,
     }),

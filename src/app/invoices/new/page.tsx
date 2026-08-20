@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { getBusinessProfile } from "@/lib/business";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import InvoiceForm from "../InvoiceForm";
@@ -11,12 +12,14 @@ export default async function NewInvoicePage({
 }: {
   searchParams: Promise<{ customerId?: string; kind?: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { customerId, kind: kindParam } = await searchParams;
   const isQuote = kindParam === "QUOTE";
   const noun = isQuote ? "quote" : "invoice";
 
   const [customers, profile] = await Promise.all([
     prisma.customer.findMany({
+      where: { accountId },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -27,7 +30,7 @@ export default async function NewInvoicePage({
         taxExemptReason: true,
       },
     }),
-    getBusinessProfile(),
+    getBusinessProfile(accountId),
   ]);
 
   if (customers.length === 0) {
@@ -61,6 +64,7 @@ export default async function NewInvoicePage({
           customers={customers}
           kind={isQuote ? "QUOTE" : "INVOICE"}
           defaultTaxRatePercent={profile.defaultTaxRatePercent}
+          divisions={profile.divisions}
           defaults={{ customerId }}
         />
       </Card>

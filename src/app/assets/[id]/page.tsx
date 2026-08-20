@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate, startOfYear, toDateInputValue } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { DIVISION_LABELS, MAINTENANCE_CATEGORIES, type Division } from "@/lib/domain";
@@ -34,9 +35,10 @@ export default async function AssetDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { id } = await params;
-  const asset = await prisma.asset.findUnique({
-    where: { id },
+  const asset = await prisma.asset.findFirst({
+    where: { id, accountId },
     include: {
       maintenance: { orderBy: { date: "desc" } },
       expenses: { orderBy: { date: "desc" }, take: 25 },

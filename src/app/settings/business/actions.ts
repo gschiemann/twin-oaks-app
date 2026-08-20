@@ -3,8 +3,9 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { saveUpload } from "@/lib/storage";
-import { DEFAULT_BUSINESS, PROFILE_ID } from "@/lib/business";
+import { DEFAULT_BUSINESS } from "@/lib/business";
 
 function str(v: FormDataEntryValue | null): string | null {
   if (typeof v !== "string") return null;
@@ -13,13 +14,14 @@ function str(v: FormDataEntryValue | null): string | null {
 }
 
 export async function saveBusinessProfile(formData: FormData) {
+  const accountId = await requireAccountId();
   const rateRaw = str(formData.get("defaultTaxRatePercent"));
   const rate = rateRaw != null && Number.isFinite(Number(rateRaw)) ? Number(rateRaw) : 0;
 
   let logoPath: string | undefined;
   const logo = formData.get("logo");
   if (logo instanceof File && logo.size > 0) {
-    const stored = await saveUpload(logo);
+    const stored = await saveUpload(logo, accountId);
     logoPath = stored.storageKey;
   }
 
@@ -37,9 +39,10 @@ export async function saveBusinessProfile(formData: FormData) {
     ...(logoPath ? { logoPath } : {}),
   };
 
+  // One profile per account (unique on accountId).
   await prisma.businessProfile.upsert({
-    where: { id: PROFILE_ID },
-    create: { id: PROFILE_ID, ...data },
+    where: { accountId },
+    create: { accountId, ...data },
     update: data,
   });
 
@@ -49,8 +52,9 @@ export async function saveBusinessProfile(formData: FormData) {
 }
 
 export async function removeLogo() {
+  const accountId = await requireAccountId();
   await prisma.businessProfile
-    .update({ where: { id: PROFILE_ID }, data: { logoPath: null } })
+    .updateMany({ where: { accountId }, data: { logoPath: null } })
     .catch(() => {});
   revalidatePath("/", "layout");
   redirect("/settings/business");

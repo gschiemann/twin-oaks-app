@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
+import { getBusinessProfile } from "@/lib/business";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { DIVISION_LABELS, TAX_STATUS_LABELS, type Division, type TaxStatus } from "@/lib/domain";
@@ -8,17 +10,21 @@ import { taxStatusTone } from "./expense-bits";
 
 export const dynamic = "force-dynamic";
 
-const DIVISION_TABS = ["ALL", "FARM", "TECH", "SHARED"] as const;
-
 export default async function ExpensesPage({
   searchParams,
 }: {
   searchParams: Promise<{ division?: string; year?: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { division = "ALL", year } = await searchParams;
   const taxYear = year ? Number(year) : undefined;
 
+  const profile = await getBusinessProfile(accountId);
+  // Single-division businesses (e.g. GENERAL) get no division tabs at all.
+  const DIVISION_TABS = profile.divisions.length > 1 ? ["ALL", ...profile.divisions] : [];
+
   const where = {
+    accountId,
     ...(division !== "ALL" ? { division } : {}),
     ...(taxYear ? { taxYear } : {}),
   };
@@ -31,7 +37,12 @@ export default async function ExpensesPage({
       include: { receipts: { select: { id: true } } },
     }),
     prisma.expense.aggregate({ where, _sum: { amountCents: true } }),
-    prisma.expense.findMany({ distinct: ["taxYear"], select: { taxYear: true }, orderBy: { taxYear: "desc" } }),
+    prisma.expense.findMany({
+      where: { accountId },
+      distinct: ["taxYear"],
+      select: { taxYear: true },
+      orderBy: { taxYear: "desc" },
+    }),
   ]);
 
   const qs = (d: string) => `/expenses?division=${d}${taxYear ? `&year=${taxYear}` : ""}`;

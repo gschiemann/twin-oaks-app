@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import {
@@ -37,9 +38,10 @@ export default async function ExpenseDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { id } = await params;
-  const expense = await prisma.expense.findUnique({
-    where: { id },
+  const expense = await prisma.expense.findFirst({
+    where: { id, accountId },
     include: { receipts: true, asset: true },
   });
   if (!expense) notFound();

@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { parseDateInput, taxYearOf } from "@/lib/dates";
 import { parseDollarsToCents } from "@/lib/money";
-import { DIVISIONS, INCOME_CATEGORIES } from "@/lib/domain";
+import { ALL_DIVISIONS, INCOME_CATEGORIES } from "@/lib/domain";
 
 function str(v: FormDataEntryValue | null): string | null {
   if (typeof v !== "string") return null;
@@ -20,7 +21,7 @@ function incomeDataFromForm(formData: FormData) {
   const category = str(formData.get("category"));
 
   if (amountCents == null || !description) return null;
-  if (!division || !(DIVISIONS as readonly string[]).includes(division)) return null;
+  if (!division || !(ALL_DIVISIONS as readonly string[]).includes(division)) return null;
   if (!category || !(INCOME_CATEGORIES as readonly string[]).includes(category)) return null;
 
   return {
@@ -37,23 +38,26 @@ function incomeDataFromForm(formData: FormData) {
 }
 
 export async function createIncome(formData: FormData) {
+  const accountId = await requireAccountId();
   const data = incomeDataFromForm(formData);
   if (!data) redirect("/income/new?error=missing");
-  await prisma.income.create({ data });
+  await prisma.income.create({ data: { ...data, accountId } });
   redirect("/income");
 }
 
 export async function updateIncome(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/income");
   const data = incomeDataFromForm(formData);
   if (!data) redirect(`/income/${id}?error=missing`);
-  await prisma.income.update({ where: { id }, data });
+  await prisma.income.updateMany({ where: { id, accountId }, data });
   redirect("/income");
 }
 
 export async function deleteIncome(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
-  if (id) await prisma.income.delete({ where: { id } });
+  if (id) await prisma.income.deleteMany({ where: { id, accountId } });
   redirect("/income");
 }

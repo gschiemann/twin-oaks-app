@@ -60,11 +60,13 @@ export class StorageNotConnectedError extends Error {
 export const MAX_DB_FILE_BYTES = 4 * 1024 * 1024;
 
 // Core writer — used by browser uploads and by the inbound-email webhook
-// (which already holds decoded Buffers, not File objects).
+// (which already holds decoded Buffers, not File objects). accountId stamps
+// database-stored files so serving can enforce ownership.
 export async function saveBuffer(
   bytes: Buffer,
   fileName: string,
   mimeType: string,
+  accountId: string,
 ): Promise<StoredFile> {
   const type = mimeType || "application/octet-stream";
   const name = fileName || "upload";
@@ -92,7 +94,13 @@ export async function saveBuffer(
   if (bytes.byteLength <= MAX_DB_FILE_BYTES) {
     try {
       const row = await prisma.storedFile.create({
-        data: { fileName: name, mimeType: type, size: bytes.byteLength, data: new Uint8Array(bytes) },
+        data: {
+          accountId,
+          fileName: name,
+          mimeType: type,
+          size: bytes.byteLength,
+          data: new Uint8Array(bytes),
+        },
         select: { id: true },
       });
       return {
@@ -113,9 +121,9 @@ export async function saveBuffer(
   return { storageKey: generatedName, fileName: name, mimeType: type, fileSize: bytes.byteLength };
 }
 
-export async function saveUpload(file: File): Promise<StoredFile> {
+export async function saveUpload(file: File, accountId: string): Promise<StoredFile> {
   const bytes = Buffer.from(await file.arrayBuffer());
-  return saveBuffer(bytes, file.name, file.type);
+  return saveBuffer(bytes, file.name, file.type, accountId);
 }
 
 // Resolve a stored key to something an <img src> / link can use.

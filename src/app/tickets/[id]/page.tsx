@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { fileSrc } from "@/lib/storage";
 import { Card, Chip, PageHeader, btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
@@ -29,7 +30,8 @@ export default async function TicketDetailPage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const ticket = await prisma.ticket.findUnique({ where: { id } });
+  const accountId = await requireAccountId();
+  const ticket = await prisma.ticket.findFirst({ where: { id, accountId } });
   if (!ticket) notFound();
 
   return (

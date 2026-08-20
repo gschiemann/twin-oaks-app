@@ -2,6 +2,7 @@
 // can open directly in Excel. Behind the login gate like every other route.
 
 import { prisma } from "@/lib/db";
+import { currentAccountId } from "@/lib/auth";
 import { csvResponse, dollars, toCsv } from "@/lib/csv";
 
 export const dynamic = "force-dynamic";
@@ -14,13 +15,15 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ report: string }> },
 ) {
+  const accountId = await currentAccountId();
+  if (!accountId) return new Response("Sign in first.", { status: 401 });
   const { report } = await params;
   const url = new URL(req.url);
   const year = Number(url.searchParams.get("year")) || new Date().getFullYear();
 
   if (report === "expenses") {
     const rows = await prisma.expense.findMany({
-      where: { taxYear: year },
+      where: { accountId, taxYear: year },
       orderBy: { date: "asc" },
       include: { asset: { select: { name: true } }, receipts: { select: { id: true } } },
     });
@@ -44,7 +47,7 @@ export async function GET(
 
   if (report === "income") {
     const rows = await prisma.income.findMany({
-      where: { taxYear: year },
+      where: { accountId, taxYear: year },
       orderBy: { date: "asc" },
     });
     return csvResponse(
@@ -61,7 +64,7 @@ export async function GET(
 
   if (report === "mileage") {
     const rows = await prisma.mileageLog.findMany({
-      where: { taxYear: year },
+      where: { accountId, taxYear: year },
       orderBy: { date: "asc" },
       include: { vehicle: { select: { name: true } } },
     });
@@ -78,7 +81,7 @@ export async function GET(
   }
 
   if (report === "assets") {
-    const rows = await prisma.asset.findMany({ orderBy: [{ division: "asc" }, { name: "asc" }] });
+    const rows = await prisma.asset.findMany({ where: { accountId }, orderBy: [{ division: "asc" }, { name: "asc" }] });
     return csvResponse(
       `twin-oaks-assets.csv`,
       toCsv(
@@ -100,14 +103,14 @@ export async function GET(
     const [exp, inc] = await Promise.all([
       prisma.expense.groupBy({
         by: ["accountingCategory"],
-        where: { taxYear: year },
+        where: { accountId, taxYear: year },
         _sum: { amountCents: true },
         _count: true,
         orderBy: { _sum: { amountCents: "desc" } },
       }),
       prisma.income.groupBy({
         by: ["category"],
-        where: { taxYear: year },
+        where: { accountId, taxYear: year },
         _sum: { amountCents: true },
         _count: true,
         orderBy: { _sum: { amountCents: "desc" } },
@@ -128,11 +131,11 @@ export async function GET(
   if (report === "pnl") {
     const divisions = ["FARM", "TECH", "SHARED"];
     const [expAll, incAll, expByDiv, incByDiv, miles] = await Promise.all([
-      prisma.expense.aggregate({ where: { taxYear: year }, _sum: { amountCents: true } }),
-      prisma.income.aggregate({ where: { taxYear: year }, _sum: { amountCents: true } }),
-      prisma.expense.groupBy({ by: ["division"], where: { taxYear: year }, _sum: { amountCents: true } }),
-      prisma.income.groupBy({ by: ["division"], where: { taxYear: year }, _sum: { amountCents: true } }),
-      prisma.mileageLog.aggregate({ where: { taxYear: year }, _sum: { miles: true } }),
+      prisma.expense.aggregate({ where: { accountId, taxYear: year }, _sum: { amountCents: true } }),
+      prisma.income.aggregate({ where: { accountId, taxYear: year }, _sum: { amountCents: true } }),
+      prisma.expense.groupBy({ by: ["division"], where: { accountId, taxYear: year }, _sum: { amountCents: true } }),
+      prisma.income.groupBy({ by: ["division"], where: { accountId, taxYear: year }, _sum: { amountCents: true } }),
+      prisma.mileageLog.aggregate({ where: { accountId, taxYear: year }, _sum: { miles: true } }),
     ]);
     const revenue = incAll._sum.amountCents ?? 0;
     const expenses = expAll._sum.amountCents ?? 0;

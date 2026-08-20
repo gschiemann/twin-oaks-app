@@ -7,7 +7,10 @@ import { prisma } from "@/lib/db";
 export const BACKUP_PREFIX = "backups/";
 export const BACKUP_KEEP = 30; // ~a month of dailies
 
-export async function buildBackup() {
+// Pass an accountId for a single business's books (the user-facing export);
+// omit it for the operational whole-database dump the nightly cron writes.
+export async function buildBackup(accountId?: string) {
+  const where = accountId ? { accountId } : undefined;
   const [
     vendors,
     receipts,
@@ -21,17 +24,17 @@ export async function buildBackup() {
     payments,
     mileage,
   ] = await Promise.all([
-    prisma.vendor.findMany(),
-    prisma.receipt.findMany(),
-    prisma.expense.findMany(),
-    prisma.income.findMany(),
-    prisma.asset.findMany(),
-    prisma.maintenanceRecord.findMany(),
-    prisma.customer.findMany(),
-    prisma.invoice.findMany(),
-    prisma.invoiceLine.findMany(),
-    prisma.payment.findMany(),
-    prisma.mileageLog.findMany(),
+    prisma.vendor.findMany({ where }),
+    prisma.receipt.findMany({ where }),
+    prisma.expense.findMany({ where }),
+    prisma.income.findMany({ where }),
+    prisma.asset.findMany({ where }),
+    prisma.maintenanceRecord.findMany({ where }),
+    prisma.customer.findMany({ where }),
+    prisma.invoice.findMany({ where }),
+    prisma.invoiceLine.findMany({ where: accountId ? { invoice: { accountId } } : undefined }),
+    prisma.payment.findMany({ where }),
+    prisma.mileageLog.findMany({ where }),
   ]);
 
   return {

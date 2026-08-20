@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { currentAccountId } from "@/lib/auth";
 import { readUpload } from "@/lib/storage";
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -35,11 +36,14 @@ export async function GET(
   const key = path.length === 1 ? decodeURIComponent(path[0]) : "";
 
   // Database-stored originals ("db:<id>" — the no-Blob-store fallback).
+  // Ownership is enforced: an id from another account 404s.
   if (key.startsWith("db:")) {
+    const accountId = await currentAccountId();
+    if (!accountId) return new Response("Not found", { status: 404 });
     const id = key.slice(3);
     if (!/^[a-z0-9]{10,40}$/i.test(id)) return new Response("Not found", { status: 404 });
     const row = await prisma.storedFile
-      .findUnique({ where: { id } })
+      .findFirst({ where: { id, accountId } })
       .catch(() => null);
     if (!row) return new Response("Not found", { status: 404 });
     return new Response(new Uint8Array(row.data), {

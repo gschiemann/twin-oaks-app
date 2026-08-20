@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { DIVISIONS, DIVISION_LABELS, type Division } from "@/lib/domain";
+import { type Division } from "@/lib/domain";
 import { toDateInputValue } from "@/lib/dates";
 import { btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
+import DivisionField from "@/components/DivisionField";
 import InvoiceLinesEditor from "./InvoiceLinesEditor";
 
 // Customers carry their own tax rule, so picking one fills the rate in.
@@ -44,6 +45,7 @@ export default function InvoiceForm({
   defaults = {},
   kind = "INVOICE",
   defaultTaxRatePercent,
+  divisions,
 }: {
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
@@ -51,6 +53,7 @@ export default function InvoiceForm({
   defaults?: Defaults;
   kind?: "INVOICE" | "QUOTE";
   defaultTaxRatePercent: number;
+  divisions: Division[];
 }) {
   const isQuote = kind === "QUOTE";
   const [customerId, setCustomerId] = useState(defaults.customerId ?? "");
@@ -92,26 +95,7 @@ export default function InvoiceForm({
         </p>
       </div>
 
-      <div>
-        <span className={labelCls}>Division *</span>
-        <div className="grid grid-cols-3 gap-2">
-          {DIVISIONS.map((d) => (
-            <label
-              key={d}
-              className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm font-medium text-stone-700 has-checked:border-oak-600 has-checked:bg-oak-50 has-checked:text-oak-800"
-            >
-              <input
-                type="radio"
-                name="division"
-                value={d}
-                defaultChecked={(defaults.division ?? "TECH") === d}
-                className="accent-oak-700"
-              />
-              {DIVISION_LABELS[d as Division]}
-            </label>
-          ))}
-        </div>
-      </div>
+      <DivisionField divisions={divisions} defaultValue={defaults.division ?? "TECH"} />
 
       <div className="grid grid-cols-2 gap-3">
         <div>

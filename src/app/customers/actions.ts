@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { TAX_TREATMENTS } from "@/lib/tax";
 
 function str(v: FormDataEntryValue | null): string | null {
@@ -38,9 +39,10 @@ function customerDataFromForm(formData: FormData) {
 }
 
 export async function createCustomer(formData: FormData) {
+  const accountId = await requireAccountId();
   const data = customerDataFromForm(formData);
   if (!data) redirect("/customers/new?error=missing");
-  const customer = await prisma.customer.create({ data });
+  const customer = await prisma.customer.create({ data: { ...data, accountId } });
 
   // Entering a customer mid-invoice? Bounce straight back into that flow.
   const returnTo = str(formData.get("returnTo"));
@@ -48,20 +50,22 @@ export async function createCustomer(formData: FormData) {
 }
 
 export async function updateCustomer(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/customers");
   const data = customerDataFromForm(formData);
   if (!data) redirect(`/customers/${id}/edit?error=missing`);
-  await prisma.customer.update({ where: { id }, data });
+  await prisma.customer.updateMany({ where: { id, accountId }, data });
   redirect(`/customers/${id}`);
 }
 
 // Customers with invoices are financial history — they can't be deleted.
 export async function deleteCustomer(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/customers");
-  const invoiceCount = await prisma.invoice.count({ where: { customerId: id } });
+  const invoiceCount = await prisma.invoice.count({ where: { customerId: id, accountId } });
   if (invoiceCount > 0) redirect(`/customers/${id}?error=has-invoices`);
-  await prisma.customer.delete({ where: { id } });
+  await prisma.customer.deleteMany({ where: { id, accountId } });
   redirect("/customers");
 }

@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { getBusinessProfile } from "@/lib/business";
 import { Card, PageHeader } from "@/components/ui";
 import InvoiceForm from "../../InvoiceForm";
@@ -12,9 +13,10 @@ export default async function EditInvoicePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { id } = await params;
-  const invoice = await prisma.invoice.findUnique({
-    where: { id },
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, accountId },
     include: { lines: { orderBy: { sortOrder: "asc" } } },
   });
   if (!invoice) notFound();
@@ -22,6 +24,7 @@ export default async function EditInvoicePage({
 
   const [customers, profile] = await Promise.all([
     prisma.customer.findMany({
+      where: { accountId },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -32,7 +35,7 @@ export default async function EditInvoicePage({
         taxExemptReason: true,
       },
     }),
-    getBusinessProfile(),
+    getBusinessProfile(accountId),
   ]);
 
   return (
@@ -45,6 +48,7 @@ export default async function EditInvoicePage({
           customers={customers}
           kind={invoice.kind === "QUOTE" ? "QUOTE" : "INVOICE"}
           defaultTaxRatePercent={profile.defaultTaxRatePercent}
+          divisions={profile.divisions}
           defaults={{
             id: invoice.id,
             customerId: invoice.customerId,

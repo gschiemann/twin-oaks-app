@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { parseDateInput, taxYearOf } from "@/lib/dates";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
-import { DIVISIONS } from "@/lib/domain";
+import { ALL_DIVISIONS } from "@/lib/domain";
 import { computeTax, isExempt, rateForCustomer } from "@/lib/tax";
 import { getBusinessProfile, snapshotBusiness } from "@/lib/business";
 import { incomeCategoryForDivision } from "./invoice-bits";
@@ -54,10 +55,10 @@ function parseLines(formData: FormData): ParsedLine[] {
   return lines;
 }
 
-async function invoiceCoreFromForm(formData: FormData) {
+async function invoiceCoreFromForm(accountId: string, formData: FormData) {
   const customerId = str(formData.get("customerId"));
   const division = str(formData.get("division"));
-  if (!customerId || !division || !(DIVISIONS as readonly string[]).includes(division)) {
+  if (!customerId || !division || !(ALL_DIVISIONS as readonly string[]).includes(division)) {
     return null;
   }
   const lines = parseLines(formData);
@@ -69,11 +70,12 @@ async function invoiceCoreFromForm(formData: FormData) {
   // rate that was actually used is persisted with the invoice so a later
   // Settings change cannot rewrite an issued document.
   const rateRaw = str(formData.get("taxRatePercent"));
-  const profile = await getBusinessProfile();
-  const customer = await prisma.customer.findUnique({
-    where: { id: customerId },
+  const profile = await getBusinessProfile(accountId);
+  const customer = await prisma.customer.findFirst({
+    where: { id: customerId, accountId },
     select: { taxTreatment: true, taxRatePercent: true },
   });
+  if (!customer) return null; // a customer from another account is invalid
 
   // An exempt customer is exempt no matter what the form posted — the rule
   // is enforced here, not trusted from the browser.
@@ -88,6 +90,7 @@ async function invoiceCoreFromForm(formData: FormData) {
 
   return {
     core: {
+      accountId,
       customerId,
       division,
       issueDate,
@@ -106,23 +109,28 @@ async function invoiceCoreFromForm(formData: FormData) {
   };
 }
 
-async function nextInvoiceNumber(kind: string): Promise<string> {
+// Numbering is per account: every business starts at INV-001 / Q-001.
+async function nextInvoiceNumber(accountId: string, kind: string): Promise<string> {
   const prefix = kind === "QUOTE" ? "Q" : "INV";
-  const count = await prisma.invoice.count({ where: { kind } });
+  const count = await prisma.invoice.count({ where: { accountId, kind } });
   for (let n = count + 1; n < count + 50; n++) {
     const number = `${prefix}-${String(n).padStart(3, "0")}`;
-    const exists = await prisma.invoice.findUnique({ where: { number } });
+    const exists = await prisma.invoice.findFirst({
+      where: { accountId, number },
+      select: { id: true },
+    });
     if (!exists) return number;
   }
   return `${prefix}-${Date.now()}`;
 }
 
 export async function createInvoice(formData: FormData) {
+  const accountId = await requireAccountId();
   const kind = str(formData.get("kind")) === "QUOTE" ? "QUOTE" : "INVOICE";
-  const parsed = await invoiceCoreFromForm(formData);
+  const parsed = await invoiceCoreFromForm(accountId, formData);
   if (!parsed) redirect(`/invoices/new?error=missing${kind === "QUOTE" ? "&kind=QUOTE" : ""}`);
 
-  const number = await nextInvoiceNumber(kind);
+  const number = await nextInvoiceNumber(accountId, kind);
   const invoice = await prisma.invoice.create({
     data: {
       number,
@@ -137,11 +145,12 @@ export async function createInvoice(formData: FormData) {
 // Quote → invoice: fresh invoice (new INV number, draft) with the quote's
 // content; the quote is stamped as accepted and stays as history.
 export async function convertQuote(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/invoices");
 
-  const quote = await prisma.invoice.findUnique({
-    where: { id },
+  const quote = await prisma.invoice.findFirst({
+    where: { id, accountId },
     include: { lines: { orderBy: { sortOrder: "asc" } } },
   });
   if (!quote || quote.kind !== "QUOTE") redirect("/invoices");
@@ -152,7 +161,8 @@ export async function convertQuote(formData: FormData) {
   const today = new Date();
   const invoice = await prisma.invoice.create({
     data: {
-      number: await nextInvoiceNumber("INVOICE"),
+      accountId,
+      number: await nextInvoiceNumber(accountId, "INVOICE"),
       kind: "INVOICE",
       customerId: quote.customerId,
       division: quote.division,
@@ -180,6 +190,7 @@ export async function convertQuote(formData: FormData) {
     },
   });
 
+  // Ownership proven by the scoped fetch above.
   await prisma.invoice.update({
     where: { id },
     data: { convertedToInvoiceId: invoice.id, status: "SENT" },
@@ -190,13 +201,14 @@ export async function convertQuote(formData: FormData) {
 
 // Draft invoices are fully editable; once sent they're financial records.
 export async function updateInvoice(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/invoices");
-  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  const invoice = await prisma.invoice.findFirst({ where: { id, accountId } });
   if (!invoice) redirect("/invoices");
   if (invoice.status !== "DRAFT") redirect(`/invoices/${id}?error=not-draft`);
 
-  const parsed = await invoiceCoreFromForm(formData);
+  const parsed = await invoiceCoreFromForm(accountId, formData);
   if (!parsed) redirect(`/invoices/${id}/edit?error=missing`);
 
   await prisma.$transaction([
@@ -210,12 +222,13 @@ export async function updateInvoice(formData: FormData) {
 }
 
 export async function setInvoiceStatus(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   const to = str(formData.get("to"));
   if (!id || !to) redirect("/invoices");
 
-  const invoice = await prisma.invoice.findUnique({
-    where: { id },
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, accountId },
     include: { payments: { select: { id: true } } },
   });
   if (!invoice) redirect("/invoices");
@@ -232,7 +245,7 @@ export async function setInvoiceStatus(formData: FormData) {
     // customer's hands.
     const freeze =
       to === "SENT" && !invoice.businessSnapshot
-        ? { businessSnapshot: snapshotBusiness(await getBusinessProfile()) }
+        ? { businessSnapshot: snapshotBusiness(await getBusinessProfile(accountId)) }
         : {};
     await prisma.invoice.update({ where: { id }, data: { status: to, ...freeze } });
   }
@@ -240,10 +253,11 @@ export async function setInvoiceStatus(formData: FormData) {
 }
 
 export async function deleteInvoice(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   if (!id) redirect("/invoices");
-  const invoice = await prisma.invoice.findUnique({
-    where: { id },
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, accountId },
     include: { payments: { select: { id: true } } },
   });
   if (invoice && invoice.status === "DRAFT" && invoice.payments.length === 0) {
@@ -255,11 +269,12 @@ export async function deleteInvoice(formData: FormData) {
 // Recording a payment puts it on the books automatically: an Income row is
 // created (division-appropriate category) and linked — no double entry.
 export async function recordPayment(formData: FormData) {
+  const accountId = await requireAccountId();
   const invoiceId = str(formData.get("invoiceId"));
   if (!invoiceId) redirect("/invoices");
 
-  const invoice = await prisma.invoice.findUnique({
-    where: { id: invoiceId },
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, accountId },
     include: { customer: true },
   });
   if (!invoice) redirect("/invoices");
@@ -275,6 +290,7 @@ export async function recordPayment(formData: FormData) {
 
   const income = await prisma.income.create({
     data: {
+      accountId,
       date,
       taxYear: taxYearOf(date),
       source: invoice.customer.name,
@@ -289,6 +305,7 @@ export async function recordPayment(formData: FormData) {
 
   await prisma.payment.create({
     data: {
+      accountId,
       invoiceId,
       customerId: invoice.customerId,
       date,
@@ -308,7 +325,7 @@ export async function recordPayment(formData: FormData) {
         status: "SENT",
         ...(invoice.businessSnapshot
           ? {}
-          : { businessSnapshot: snapshotBusiness(await getBusinessProfile()) }),
+          : { businessSnapshot: snapshotBusiness(await getBusinessProfile(accountId)) }),
       },
     });
   }
@@ -317,14 +334,17 @@ export async function recordPayment(formData: FormData) {
 }
 
 export async function deletePayment(formData: FormData) {
+  const accountId = await requireAccountId();
   const id = str(formData.get("id"));
   const invoiceId = str(formData.get("invoiceId"));
   if (id) {
-    const payment = await prisma.payment.findUnique({ where: { id } });
+    const payment = await prisma.payment.findFirst({ where: { id, accountId } });
     if (payment) {
       await prisma.payment.delete({ where: { id } });
       if (payment.incomeId) {
-        await prisma.income.delete({ where: { id: payment.incomeId } }).catch(() => {});
+        await prisma.income
+          .deleteMany({ where: { id: payment.incomeId, accountId } })
+          .catch(() => {});
       }
     }
   }

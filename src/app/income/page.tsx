@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { DIVISION_LABELS, type Division } from "@/lib/domain";
@@ -8,9 +9,10 @@ import { Card, Chip, EmptyState, PageHeader, btnPrimaryCls, divisionTone } from 
 export const dynamic = "force-dynamic";
 
 export default async function IncomePage() {
+  const accountId = await requireAccountId();
   const [incomes, total] = await Promise.all([
-    prisma.income.findMany({ orderBy: { date: "desc" }, take: 200 }),
-    prisma.income.aggregate({ _sum: { amountCents: true } }),
+    prisma.income.findMany({ where: { accountId }, orderBy: { date: "desc" }, take: 200 }),
+    prisma.income.aggregate({ where: { accountId }, _sum: { amountCents: true } }),
   ]);
 
   return (

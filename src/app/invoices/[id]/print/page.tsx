@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import PrintButton from "@/components/PrintButton";
 import {
-  DEFAULT_LOGO_SRC,
+  brandLogoSrcFor,
   businessAddressLines,
   businessFromSnapshot,
   getBusinessProfile,
@@ -20,9 +21,10 @@ export default async function InvoicePrintPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const accountId = await requireAccountId();
   const { id } = await params;
-  const invoice = await prisma.invoice.findUnique({
-    where: { id },
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, accountId },
     include: {
       customer: true,
       lines: { orderBy: { sortOrder: "asc" } },
@@ -38,7 +40,7 @@ export default async function InvoicePrintPage({
   const isQuote = invoice.kind === "QUOTE";
   const { customer } = invoice;
   // FR-007: the frozen snapshot wins so an issued document never changes.
-  const business = businessFromSnapshot(invoice.businessSnapshot, await getBusinessProfile());
+  const business = businessFromSnapshot(invoice.businessSnapshot, await getBusinessProfile(accountId));
   const addressLines = businessAddressLines(business);
 
   return (
@@ -54,12 +56,13 @@ export default async function InvoicePrintPage({
         {/* Header */}
         <div className="flex items-start justify-between gap-6">
           <div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={business.logoPath ? fileSrc(business.logoPath) : DEFAULT_LOGO_SRC}
-              alt=""
-              className="mb-2 h-16 w-auto"
-            />
+            {(() => {
+              const logo = brandLogoSrcFor(accountId, business.logoPath ? fileSrc(business.logoPath) : null);
+              return logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logo} alt="" className="mb-2 h-16 w-auto" />
+              ) : null;
+            })()}
             <div className="display-serif text-xl font-bold tracking-tight text-stone-900">
               {business.name}
             </div>
