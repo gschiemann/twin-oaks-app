@@ -15,7 +15,7 @@ type Props = { blobEnabled: boolean };
 // Anything at or under this still fits through the serverless route (the
 // platform caps request bodies around 4.5 MB), so when the direct-to-storage
 // path fails we can quietly send the file the old way instead of stranding
-// the operator.
+// the operator. It's also the ceiling for posting bytes to the scan API.
 const SERVER_ROUTE_MAX_BYTES = 3_500_000;
 
 // The API always answers JSON. Anything else — an HTML login page after the
@@ -41,15 +41,146 @@ async function parseResponse(
   }
 }
 
+type ScanFields = {
+  vendorName: string | null;
+  receiptDate: string | null;
+  total: string | null;
+  salesTax: string | null;
+  receiptNumber: string | null;
+};
+
+const SCAN_LABELS: [keyof ScanFields, string][] = [
+  ["vendorName", "vendor"],
+  ["receiptDate", "date"],
+  ["total", "total"],
+  ["salesTax", "sales tax"],
+  ["receiptNumber", "receipt #"],
+];
+
+function localToday(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+// Drop scanned values into the (server-rendered) details form. Never clobbers
+// something the operator already typed — the one exception is the date field,
+// which is overwritten only while it still holds its "today" default.
+function applyScanFields(fields: ScanFields): string[] {
+  const form = document.getElementById("receipt-details") as HTMLFormElement | null;
+  if (!form) return [];
+  const defaults = new Set([localToday(-1), localToday(0), localToday(1)]);
+  const filled: string[] = [];
+
+  for (const [name, label] of SCAN_LABELS) {
+    const value = fields[name];
+    if (!value) continue;
+    const el = form.elements.namedItem(name);
+    if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) continue;
+    const current = el.value.trim();
+    const isDefaultDate = name === "receiptDate" && defaults.has(current);
+    if (current !== "" && !isDefaultDate) continue;
+    if (current === value) continue;
+    el.value = value;
+    filled.push(label);
+  }
+
+  if (filled.length > 0) {
+    const details = form.querySelector("details");
+    if (details) details.open = true;
+  }
+  return filled;
+}
+
 export default function ReceiptUploader({ blobEnabled }: Props) {
   const router = useRouter();
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // A late scan answer for a file the operator already replaced must not
+  // fill the form — every pick bumps this and stale responses are dropped.
+  const scanSeq = useRef(0);
+  // Set when the file was already uploaded to storage at pick time (big
+  // files, so the scan can read them) — save() then skips the re-upload.
+  const uploadedUrlRef = useRef<string | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+  const [scanFilled, setScanFilled] = useState<string[]>([]);
+
+  async function uploadToBlob(f: File): Promise<string> {
+    // A hung or endlessly-retrying connection must not strand the operator
+    // forever: give the direct path a hard deadline, after which the caller's
+    // fallback (small files) or a real error message takes over. Scaled by
+    // size so a genuinely slow cellular upload of a big PDF isn't cut off
+    // mid-transfer. The Promise.race is the guarantee — the library's
+    // internal retry loop can sleep through an abort signal.
+    const deadlineMs = Math.max(90_000, Math.round(f.size / 1024) * 30);
+    const { upload } = await import("@vercel/blob/client");
+    const blob = await Promise.race([
+      upload(`receipts/${f.name}`, f, {
+        access: "public",
+        handleUploadUrl: "/api/blob/token",
+        contentType: f.type || undefined,
+        abortSignal:
+          typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+            ? AbortSignal.timeout(deadlineMs)
+            : undefined,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("The storage upload timed out.")), deadlineMs + 5_000),
+      ),
+    ]);
+    return blob.url;
+  }
+
+  // Fire-and-forget: a scan is a convenience. It fills empty fields when it
+  // succeeds and says why when it can't — it never blocks saving.
+  async function scanFile(f: File, seq: number, src: string | null) {
+    setScanning(true);
+    setScanNote(null);
+    setScanFilled([]);
+    try {
+      let res: Response;
+      if (src) {
+        res = await fetch("/api/receipts/scan", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ src }),
+        });
+      } else {
+        const body = new FormData();
+        body.set("file", f);
+        res = await fetch("/api/receipts/scan", { method: "POST", body });
+      }
+      if (seq !== scanSeq.current) return; // operator picked a different file
+      const json = (await res.json()) as {
+        ok: boolean;
+        fields?: ScanFields | null;
+        note?: string | null;
+      };
+      if (seq !== scanSeq.current) return;
+      if (json.ok && json.fields) {
+        const filled = applyScanFields(json.fields);
+        setScanFilled(filled);
+        if (filled.length === 0 && json.note) setScanNote(json.note);
+      } else if (json.note) {
+        setScanNote(json.note);
+      }
+    } catch {
+      // Reading failed — the form still works by hand, say nothing scary.
+      if (seq === scanSeq.current) {
+        setScanNote("Couldn't read the file automatically — fill in what matters below.");
+      }
+    } finally {
+      if (seq === scanSeq.current) setScanning(false);
+    }
+  }
 
   async function pick(input: HTMLInputElement | null) {
     const chosen = input?.files?.[0];
@@ -58,6 +189,10 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
     if (!chosen) return;
     setError(null);
     setBusy("Preparing…");
+    const seq = ++scanSeq.current;
+    uploadedUrlRef.current = null;
+    setScanNote(null);
+    setScanFilled([]);
     try {
       // Read the bytes NOW, not at send time. A file picked from iCloud/Files
       // on iOS can arrive as a lazy handle that Safari fails to stream when
@@ -75,6 +210,25 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
       if (preview) URL.revokeObjectURL(preview);
       setFile(shrunk);
       setPreview(shrunk.type.startsWith("image/") ? URL.createObjectURL(shrunk) : null);
+
+      // Read the document and pre-fill the details. Small files post their
+      // bytes; big ones go to storage first (they'd blow the route's body
+      // cap) and are scanned from there — save() then reuses that upload.
+      if (shrunk.size <= SERVER_ROUTE_MAX_BYTES) {
+        void scanFile(shrunk, seq, null);
+      } else if (blobEnabled) {
+        setBusy("Uploading…");
+        try {
+          const url = await uploadToBlob(shrunk);
+          if (seq === scanSeq.current) {
+            uploadedUrlRef.current = url;
+            void scanFile(shrunk, seq, url);
+          }
+        } catch {
+          // Upload retries at save time through the normal path; the scan is
+          // simply skipped for a file this large.
+        }
+      }
     } catch {
       setFile(null);
       setPreview(null);
@@ -114,42 +268,21 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
       if (blobEnabled) {
         // Straight to storage — never through a serverless body limit.
         setBusy("Uploading…");
-        let storageKey: string | null = null;
-        try {
-          // A hung or endlessly-retrying connection must not strand the
-          // operator forever: give the direct path a hard deadline, after
-          // which the fallback below (small files) or a real error message
-          // takes over. Scaled by size so a genuinely slow cellular upload
-          // of a big PDF isn't cut off mid-transfer. The Promise.race is the
-          // guarantee — the library's internal retry loop can sleep through
-          // an abort signal, so we stop waiting on our own clock.
-          const deadlineMs = Math.max(90_000, Math.round(file.size / 1024) * 30);
-          const { upload } = await import("@vercel/blob/client");
-          const blob = await Promise.race([
-            upload(`receipts/${file.name}`, file, {
-              access: "public",
-              handleUploadUrl: "/api/blob/token",
-              contentType: file.type || undefined,
-              abortSignal:
-                typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
-                  ? AbortSignal.timeout(deadlineMs)
-                  : undefined,
-            }),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("The storage upload timed out.")), deadlineMs + 5_000),
-            ),
-          ]);
-          storageKey = blob.url;
-        } catch (e) {
-          // Direct-to-storage failed. A small file still fits through the
-          // server route, so fall through to that instead of giving up.
-          if (file.size > SERVER_ROUTE_MAX_BYTES) {
-            const reason = e instanceof Error ? e.message : "unknown error";
-            throw new Error(
-              `Direct upload to storage failed (${reason}), and the file is too big to send any other way. Try a photo of the document instead.`,
-            );
+        let storageKey: string | null = uploadedUrlRef.current;
+        if (!storageKey) {
+          try {
+            storageKey = await uploadToBlob(file);
+          } catch (e) {
+            // Direct-to-storage failed. A small file still fits through the
+            // server route, so fall through to that instead of giving up.
+            if (file.size > SERVER_ROUTE_MAX_BYTES) {
+              const reason = e instanceof Error ? e.message : "unknown error";
+              throw new Error(
+                `Direct upload to storage failed (${reason}), and the file is too big to send any other way. Try a photo of the document instead.`,
+              );
+            }
+            console.warn("[uploader] storage upload failed, using the server route:", e);
           }
-          console.warn("[uploader] storage upload failed, using the server route:", e);
         }
         if (storageKey) {
           setBusy("Saving…");
@@ -221,6 +354,18 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
           </span>
           <span className="shrink-0 text-xs text-oak-700">{humanSize(file.size)}</span>
         </div>
+      ) : null}
+
+      {scanning ? (
+        <p className="mb-3 rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-600">
+          🔎 Reading the receipt…
+        </p>
+      ) : scanFilled.length > 0 ? (
+        <p className="mb-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+          ✓ Filled from the file: {scanFilled.join(", ")} — check them before saving.
+        </p>
+      ) : scanNote ? (
+        <p className="mb-3 rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-600">{scanNote}</p>
       ) : null}
 
       <div className="mb-3 grid grid-cols-2 gap-2">

@@ -100,7 +100,18 @@ export const BACKLOG: BacklogItem[] = [
     priority: "HIGH",
     status: "WORKING",
     devNotes:
-      "Done: photo/PDF upload (see BUG-002), forwarded-email import with vendor/date/total/tax/number extraction, original always stored, duplicate suppression on email, assign-to-asset on the expense. Open: line-item and shipping extraction, category suggestion from vendor history, drag-and-drop on desktop, bank CSV import and matching.",
+      "Done: photo/PDF upload (see BUG-002), forwarded-email import with vendor/date/total/tax/number extraction, original always stored, duplicate suppression on email, assign-to-asset on the expense. NEW in v3.5: picking a file on Add receipt reads it and pre-fills vendor/date/total/tax/receipt# for review — PDFs with a text layer are read for free on the spot; photos and scanned PDFs are read by AI once an Anthropic API key is added to the deployment (until then a note says so). Open: line-item and shipping extraction, category suggestion from vendor history, drag-and-drop on desktop, bank CSV import and matching.",
+  },
+  {
+    kind: "UI",
+    number: 1,
+    title: "Date and Total fields overlapped on iPhone",
+    description:
+      "On the Add receipt screen the Date box spilled into the Total box on an iPhone — iOS gives date inputs a minimum width that refuses to shrink inside a two-column row.",
+    priority: "MEDIUM",
+    status: "READY_FOR_TESTING",
+    devNotes:
+      "Every form input now carries min-width:0 (shared style in components/ui.tsx), which lets iOS date fields shrink to their column. Fixes the same layout on Expenses, Income, Invoices, Assets and Mileage, which use the same two-column pattern.",
   },
   {
     kind: "FR",

@@ -2,8 +2,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 // Shared form control styles (forms are server-rendered; keep classes in one place).
+// min-w-0 matters: iOS gives <input type="date"> an intrinsic minimum width that
+// refuses to shrink inside a grid cell, so a two-column Date/Total row overlaps
+// on an iPhone without it.
 export const inputCls =
-  "w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 placeholder-stone-400 focus:border-oak-600 focus:outline-none focus:ring-2 focus:ring-oak-200";
+  "w-full min-w-0 rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 placeholder-stone-400 focus:border-oak-600 focus:outline-none focus:ring-2 focus:ring-oak-200";
 export const labelCls = "mb-1 block text-sm font-medium text-stone-700";
 export const btnPrimaryCls =
   "inline-flex items-center justify-center gap-2 rounded-xl bg-oak-700 px-4 py-2.5 text-base font-semibold text-white shadow-sm active:bg-oak-800";
