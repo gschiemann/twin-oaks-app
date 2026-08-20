@@ -18,6 +18,28 @@ export const DIVISION_LABELS: Record<Division, string> = {
   GENERAL: "General",
 };
 
+// Household (personal) spending categories — the budgeting side of the app.
+// Deliberately everyday language, not tax language.
+export const HOUSEHOLD_CATEGORIES = [
+  "Groceries",
+  "Rent / mortgage",
+  "Utilities",
+  "Phone & internet",
+  "Car & gas",
+  "Insurance",
+  "Health",
+  "Kids & school",
+  "Clothing",
+  "Household supplies",
+  "Dining out",
+  "Entertainment",
+  "Subscriptions",
+  "Gifts",
+  "Savings",
+  "Other",
+] as const;
+export type HouseholdCategory = (typeof HOUSEHOLD_CATEGORIES)[number];
+
 // Accounting categories — bookkeeping/tax preparation level (SPEC §6).
 export const ACCOUNTING_CATEGORIES = [
   "Repairs & maintenance",

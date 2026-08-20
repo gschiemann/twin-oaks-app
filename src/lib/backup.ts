@@ -23,6 +23,8 @@ export async function buildBackup(accountId?: string) {
     invoiceLines,
     payments,
     mileage,
+    householdExpenses,
+    householdBudgets,
   ] = await Promise.all([
     prisma.vendor.findMany({ where }),
     prisma.receipt.findMany({ where }),
@@ -35,11 +37,13 @@ export async function buildBackup(accountId?: string) {
     prisma.invoiceLine.findMany({ where: accountId ? { invoice: { accountId } } : undefined }),
     prisma.payment.findMany({ where }),
     prisma.mileageLog.findMany({ where }),
+    prisma.householdExpense.findMany({ where }),
+    prisma.householdBudget.findMany({ where }),
   ]);
 
   return {
     app: "twin-oaks-os",
-    schemaVersion: 3,
+    schemaVersion: 4,
     exportedAt: new Date().toISOString(),
     counts: {
       vendors: vendors.length,
@@ -53,6 +57,8 @@ export async function buildBackup(accountId?: string) {
       invoiceLines: invoiceLines.length,
       payments: payments.length,
       mileage: mileage.length,
+      householdExpenses: householdExpenses.length,
+      householdBudgets: householdBudgets.length,
     },
     // NOTE: receipt/document FILES are not inlined — `filePath` on each
     // receipt points at the stored original. A future ZIP export bundles
@@ -69,6 +75,8 @@ export async function buildBackup(accountId?: string) {
       invoiceLines,
       payments,
       mileage,
+      householdExpenses,
+      householdBudgets,
     },
   };
 }

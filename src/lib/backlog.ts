@@ -115,6 +115,17 @@ export const BACKLOG: BacklogItem[] = [
       "Shipped in v4.0. Every table carries an accountId and every query filters on it; existing data belongs to the owner account, which the classic password (and existing sessions) still open. New accounts sign up at /signup, get their own business profile, invoice numbering (their own INV-001), vendors, tracker, and a single 'General' division so the Farm/Tech pickers disappear. Printed documents use their business name, with no Twin Oaks logo unless they upload one. Sign-ups can be closed later with ALLOW_SIGNUPS=false.",
   },
   {
+    kind: "FR",
+    number: 9,
+    title: "Household expenses & budgets",
+    description:
+      "Track personal/household spending and monthly budgets alongside the business — groceries, rent, utilities, kids — with per-category budget targets and month-by-month tracking. Kept fully separate from business records so the Tax Center and business reports never see personal spending.",
+    priority: "HIGH",
+    status: "READY_FOR_TESTING",
+    devNotes:
+      "Shipped in v4.1. Household lives at /household (More → Household & budgets): ten-second add form, month navigation, per-category spent-vs-budget bars (red when over), and a budgets editor (one monthly number per category, blank = untracked). Own database tables per account — by construction it cannot leak into business books, exports include it, and each account's household data is private to them. A dashboard card appears once the first entry or budget exists.",
+  },
+  {
     kind: "UI",
     number: 1,
     title: "Date and Total fields overlapped on iPhone",

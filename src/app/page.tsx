@@ -70,6 +70,8 @@ export default async function DashboardPage() {
     recentExpenses,
     recentIncome,
     openInvoices,
+    householdMonth,
+    householdBudgets,
   ] = await Promise.all([
     sums(accountId, "expense", monthStart),
     sums(accountId, "income", monthStart),
@@ -88,6 +90,12 @@ export default async function DashboardPage() {
       where: { accountId, status: "SENT", kind: "INVOICE" },
       include: { payments: { select: { amountCents: true } } },
     }),
+    prisma.householdExpense.aggregate({
+      where: { accountId, date: { gte: monthStart } },
+      _sum: { amountCents: true },
+      _count: true,
+    }),
+    prisma.householdBudget.aggregate({ where: { accountId }, _sum: { monthlyCents: true }, _count: true }),
   ]);
 
   const outstandingCents = openInvoices.reduce(
@@ -155,6 +163,24 @@ export default async function DashboardPage() {
           </span>
         </div>
       </Card>
+
+      {householdMonth._count > 0 || householdBudgets._count > 0 ? (
+        <Link href="/household" className="mb-4 block">
+          <Card className="flex items-center justify-between active:bg-stone-50">
+            <div>
+              <p className="text-sm font-medium text-stone-700">🏠 Household this month</p>
+              <p className="text-xs text-stone-500">
+                {householdBudgets._count > 0
+                  ? `of ${formatCents(householdBudgets._sum.monthlyCents ?? 0)} budgeted`
+                  : "Personal spending — separate from the business"}
+              </p>
+            </div>
+            <span className="text-xl font-bold tabular-nums text-stone-900">
+              {formatCents(householdMonth._sum.amountCents ?? 0)}
+            </span>
+          </Card>
+        </Link>
+      ) : null}
 
       {awaitingCount > 0 ? (
         <Link href="/invoices" className="mb-4 block">

@@ -389,10 +389,34 @@ const DDL: string[] = [
   `CREATE INDEX IF NOT EXISTS "Payment_accountId_idx" ON "Payment"("accountId")`,
   `CREATE INDEX IF NOT EXISTS "MileageLog_accountId_idx" ON "MileageLog"("accountId")`,
 
-  // LAST on purpose: the probe targets this column, so its presence proves
-  // the whole multi-user block ran.
   `ALTER TABLE "Passkey" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT 'owner'`,
   `CREATE INDEX IF NOT EXISTS "Passkey_accountId_idx" ON "Passkey"("accountId")`,
+
+  // ————— V4.1: household (personal) money — own tables, never the business books —————
+  `CREATE TABLE IF NOT EXISTS "HouseholdExpense" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL,
+    "description" TEXT,
+    "amountCents" INTEGER NOT NULL,
+    "category" TEXT NOT NULL,
+    "paymentMethod" TEXT,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "HouseholdExpense_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "HouseholdExpense_accountId_date_idx" ON "HouseholdExpense"("accountId", "date")`,
+  // LAST on purpose: the probe targets this table, so its presence proves
+  // every earlier block (multi-user included) ran.
+  `CREATE TABLE IF NOT EXISTS "HouseholdBudget" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "category" TEXT NOT NULL,
+    "monthlyCents" INTEGER NOT NULL,
+    CONSTRAINT "HouseholdBudget_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "HouseholdBudget_accountId_category_key" ON "HouseholdBudget"("accountId", "category")`,
 ];
 
 export type DbStatus =
@@ -421,7 +445,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
     // Probe the NEWEST schema element (table OR column) — if an older
     // deploy's schema is present but anything newer is missing, the
     // idempotent DDL below fills the gap.
-    await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "Passkey" LIMIT 1`);
+    await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "HouseholdBudget" LIMIT 1`);
     return { ok: true }; // schema already present
   } catch (probeErr) {
     // Something missing (or connection issue) — attempt to apply the schema.
@@ -429,7 +453,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
       for (const stmt of DDL) {
         await prisma.$executeRawUnsafe(stmt);
       }
-      await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "Passkey" LIMIT 1`);
+      await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "HouseholdBudget" LIMIT 1`);
       console.log("[twin-oaks] database schema applied by self-heal");
       return { ok: true };
     } catch (healErr) {
