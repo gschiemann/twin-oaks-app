@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getBusinessProfile } from "@/lib/business";
 import { fileSrc } from "@/lib/storage";
 import { Card, PageHeader, btnPrimaryCls, btnSecondaryCls, inputCls, labelCls } from "@/components/ui";
+import SolidFileInput from "@/components/SolidFileInput";
 import { removeLogo, saveBusinessProfile } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -159,10 +160,9 @@ export default async function BusinessProfilePage({
                 <span className="text-xs text-stone-500">Upload a new file to replace it.</span>
               </div>
             ) : null}
-            <input
+            <SolidFileInput
               id="logo"
               name="logo"
-              type="file"
               accept="image/*"
               className="w-full rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-4 text-sm text-stone-600 file:mr-3 file:rounded-lg file:border-0 file:bg-oak-700 file:px-4 file:py-2 file:font-semibold file:text-white"
             />

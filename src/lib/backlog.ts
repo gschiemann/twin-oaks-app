@@ -39,7 +39,7 @@ export const BACKLOG: BacklogItem[] = [
     priority: "HIGH",
     status: "READY_FOR_TESTING",
     devNotes:
-      "Add-receipt now has two buttons: 'Take photo' (keeps capture) and 'Choose file' (no capture — reaches Photos/iCloud/Files and accepts PDFs). Attach-to-receipt and bug-screenshot inputs also dropped capture. Files go browser → blob storage directly via a token minted behind the login gate, so the body limit is out of the path; the multipart route remains for local dev. Photos are downscaled to 2000px JPEG on-device (4.2 MB → ~556 KB), which also normalizes iPhone HEIC. Preview, size, progress and real error messages added. Verified with a 4032×3024 photo and a PDF.",
+      "Add-receipt now has two buttons: 'Take photo' (keeps capture) and 'Choose file' (no capture — reaches Photos/iCloud/Files and accepts PDFs). Attach-to-receipt and bug-screenshot inputs also dropped capture. Files go browser → blob storage directly via a token minted behind the login gate, so the body limit is out of the path; the multipart route remains for local dev. Photos are downscaled to 2000px JPEG on-device (4.2 MB → ~556 KB), which also normalizes iPhone HEIC. Preview, size, progress and real error messages added. REGRESSION FOUND ON iPad (PDF → \"didn't come through\"), fixed in v3.4: the file's bytes are now read the moment it is picked (an iCloud file handle can go stale by send time and the body leaves empty — photos were immune because shrinking re-encodes them, PDFs weren't), a failed direct-to-storage upload now falls back to the server route for small files, and every failure names its actual stage (unreadable body / empty file / storage not connected / sign-in expired) instead of one catch-all message.",
   },
   {
     kind: "FR",

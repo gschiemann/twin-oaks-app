@@ -5,7 +5,7 @@
 // Behind the login gate, like everything else that touches records.
 
 import { prisma } from "@/lib/db";
-import { saveUpload } from "@/lib/storage";
+import { StorageNotConnectedError, saveUpload } from "@/lib/storage";
 import { parseDateInput } from "@/lib/dates";
 import { parseDollarsToCents } from "@/lib/money";
 
@@ -20,13 +20,17 @@ function str(v: FormDataEntryValue | string | null | undefined): string | null {
 
 export async function POST(req: Request) {
   const contentType = req.headers.get("content-type") ?? "";
+  const contentLength = req.headers.get("content-length") ?? "?";
 
   let filePath: string | null = null;
   let fileName: string | null = null;
   let mimeType: string | null = null;
   let fileSize: number | null = null;
+  let upload: File | null = null;
   let fields: Record<string, string | null> = {};
 
+  // Stage 1: read the body. Each failure mode gets its own words — one
+  // catch-all string here cost a day of blind debugging on an iPad once.
   try {
     if (contentType.includes("application/json")) {
       const body = (await req.json()) as Record<string, unknown>;
@@ -46,13 +50,7 @@ export async function POST(req: Request) {
     } else {
       const form = await req.formData();
       const file = form.get("file");
-      if (file instanceof File && file.size > 0) {
-        const stored = await saveUpload(file);
-        filePath = stored.storageKey;
-        fileName = stored.fileName;
-        mimeType = stored.mimeType;
-        fileSize = stored.fileSize;
-      }
+      if (file instanceof File) upload = file;
       fields = {
         vendorName: str(form.get("vendorName")),
         receiptDate: str(form.get("receiptDate")),
@@ -64,8 +62,57 @@ export async function POST(req: Request) {
       };
     }
   } catch (e) {
-    console.error("[receipt-create] unreadable request:", e);
-    return Response.json({ ok: false, error: "That upload didn't come through." }, { status: 400 });
+    console.error(
+      `[receipt-create] unreadable body (content-type="${contentType}", content-length=${contentLength}):`,
+      e,
+    );
+    return Response.json(
+      {
+        ok: false,
+        error:
+          "The save request arrived without its contents — usually a file the device couldn't read at send time. If it lives in iCloud, open it once in the Files app so it downloads, then pick it again.",
+      },
+      { status: 400 },
+    );
+  }
+
+  // Stage 2: a picked file that reads as zero bytes is the iOS lazy-download
+  // signature (an iCloud item that was never materialized on the device).
+  if (upload && upload.size === 0) {
+    console.error(`[receipt-create] zero-byte file "${upload.name}" (${upload.type})`);
+    return Response.json(
+      {
+        ok: false,
+        error:
+          "That file arrived empty (0 bytes). Open it once in the Files app so it downloads from iCloud, then pick it again.",
+      },
+      { status: 400 },
+    );
+  }
+
+  // Stage 3: put the file somewhere durable. A storage failure must never be
+  // reported as a transfer failure — it sends the operator to the wrong fix.
+  if (upload) {
+    try {
+      const stored = await saveUpload(upload);
+      filePath = stored.storageKey;
+      fileName = stored.fileName;
+      mimeType = stored.mimeType;
+      fileSize = stored.fileSize;
+    } catch (e) {
+      console.error("[receipt-create] storing the file failed:", e);
+      if (e instanceof StorageNotConnectedError) {
+        return Response.json({ ok: false, error: e.message }, { status: 503 });
+      }
+      return Response.json(
+        {
+          ok: false,
+          error:
+            "The file transferred but couldn't be stored, so nothing was saved. Try again in a minute — if it keeps happening, check the Blob store on the Vercel dashboard.",
+        },
+        { status: 502 },
+      );
+    }
   }
 
   try {

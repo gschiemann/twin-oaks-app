@@ -73,6 +73,11 @@ export async function attachReceiptFile(formData: FormData) {
   const id = str(formData.get("id"));
   if (!id) redirect("/receipts");
   const file = formData.get("file");
+  // A file that arrives with zero bytes is an iCloud item the device never
+  // actually downloaded — say so instead of silently attaching nothing.
+  if (file instanceof File && file.name && file.size === 0) {
+    redirect(`/receipts/${id}?attach=empty`);
+  }
   if (file instanceof File && file.size > 0) {
     const meta = await saveUpload(file);
     await prisma.receipt.update({

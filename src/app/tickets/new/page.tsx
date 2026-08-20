@@ -1,4 +1,5 @@
 import { Card, PageHeader, btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
+import SolidFileInput from "@/components/SolidFileInput";
 import {
   KIND_LABELS,
   PRIORITIES,
@@ -100,10 +101,9 @@ export default async function NewTicketPage({
             </label>
             {/* A bug report is nearly always an EXISTING screenshot, so this
                 must reach Photos — `capture` would force the camera instead. */}
-            <input
+            <SolidFileInput
               id="attachment"
               name="attachment"
-              type="file"
               accept="image/*"
               className="w-full rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-6 text-sm text-stone-600 file:mr-3 file:rounded-lg file:border-0 file:bg-oak-700 file:px-4 file:py-2 file:font-semibold file:text-white"
             />

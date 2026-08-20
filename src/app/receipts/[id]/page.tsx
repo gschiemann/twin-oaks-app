@@ -11,16 +11,20 @@ import {
 } from "@/lib/domain";
 import { Card, PageHeader, btnPrimaryCls, btnSecondaryCls, inputCls, labelCls } from "@/components/ui";
 import { fileSrc } from "@/lib/storage";
+import SolidFileInput from "@/components/SolidFileInput";
 import { attachReceiptFile, updateReceipt } from "../actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReceiptDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ attach?: string }>;
 }) {
   const { id } = await params;
+  const { attach } = await searchParams;
   const receipt = await prisma.receipt.findUnique({
     where: { id },
     include: { expense: true },
@@ -78,16 +82,23 @@ export default async function ReceiptDetailPage({
           <p className="mb-2 text-sm font-medium text-stone-700">
             No file attached yet — add the photo or emailed PDF:
           </p>
-          <form action={attachReceiptFile} className="flex items-center gap-2">
+          {attach === "empty" ? (
+            <p className="mb-2 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+              That file arrived empty (0 bytes) — nothing was attached. Open it once in the Files
+              app so it downloads from iCloud, then pick it again.
+            </p>
+          ) : null}
+          <form action={attachReceiptFile} className="flex items-start gap-2">
             <input type="hidden" name="id" value={receipt.id} />
             {/* No `capture` here on purpose: on iOS it hides Photo Library
                 and Files, which is exactly where an emailed PDF lives. */}
-            <input
-              name="file"
-              type="file"
-              accept="image/*,application/pdf,.pdf,.heic,.heif"
-              className="min-w-0 flex-1 text-sm text-stone-600 file:mr-2 file:rounded-lg file:border-0 file:bg-oak-700 file:px-3 file:py-1.5 file:font-semibold file:text-white"
-            />
+            <div className="min-w-0 flex-1">
+              <SolidFileInput
+                name="file"
+                accept="image/*,application/pdf,.pdf,.heic,.heif"
+                className="w-full text-sm text-stone-600 file:mr-2 file:rounded-lg file:border-0 file:bg-oak-700 file:px-3 file:py-1.5 file:font-semibold file:text-white"
+              />
+            </div>
             <button type="submit" className={btnSecondaryCls}>
               Attach
             </button>

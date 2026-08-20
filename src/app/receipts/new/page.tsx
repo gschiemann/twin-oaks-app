@@ -9,6 +9,9 @@ export default function NewReceiptPage() {
   // Blob storage lets the browser upload straight to storage, which is the
   // only way a full-size phone photo gets through reliably.
   const blobEnabled = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  // On Vercel the filesystem is read-only, so no blob store means no file
+  // storage AT ALL — say so on the page instead of failing at save time.
+  const storageMissing = Boolean(process.env.VERCEL) && !blobEnabled;
 
   return (
     <div>
@@ -16,6 +19,13 @@ export default function NewReceiptPage() {
         title="Add receipt"
         sub="Snap it or pick a file — details are optional, categorize later."
       />
+      {storageMissing ? (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <span className="font-semibold">File storage isn&apos;t connected on this deployment.</span>{" "}
+          Receipt details still save, but photos and PDFs can&apos;t be stored: in Vercel open the
+          project → Storage → connect the Blob store to all environments, then redeploy.
+        </div>
+      ) : null}
       <Card>
         {/* The uploader reads these fields when it saves, so they can stay a
             plain (non-submitting) form. */}

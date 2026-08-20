@@ -12,6 +12,35 @@ import { btnPrimaryCls, btnSecondaryCls } from "./ui";
 
 type Props = { blobEnabled: boolean };
 
+// Anything at or under this still fits through the serverless route (the
+// platform caps request bodies around 4.5 MB), so when the direct-to-storage
+// path fails we can quietly send the file the old way instead of stranding
+// the operator.
+const SERVER_ROUTE_MAX_BYTES = 3_500_000;
+
+// The API always answers JSON. Anything else — an HTML login page after the
+// session cookie expired, an empty body from a proxy — used to crash
+// res.json() and show the operator a JSON parse error. Name the real cause.
+async function parseResponse(
+  res: Response,
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as { ok: boolean; id?: string; error?: string };
+  } catch {
+    if (res.redirected || res.status === 401 || res.status === 403 || /<html/i.test(text)) {
+      return {
+        ok: false,
+        error: "Your sign-in expired — refresh this page, sign in, and try again.",
+      };
+    }
+    return {
+      ok: false,
+      error: `The server answered with status ${res.status} instead of a result. Try again.`,
+    };
+  }
+}
+
 export default function ReceiptUploader({ blobEnabled }: Props) {
   const router = useRouter();
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -24,16 +53,48 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
 
   async function pick(input: HTMLInputElement | null) {
     const chosen = input?.files?.[0];
+    // Clear the input so picking the same file again still fires onChange.
+    if (input) input.value = "";
     if (!chosen) return;
     setError(null);
     setBusy("Preparing…");
     try {
-      const shrunk = await shrinkImage(chosen);
+      // Read the bytes NOW, not at send time. A file picked from iCloud/Files
+      // on iOS can arrive as a lazy handle that Safari fails to stream when
+      // the request is finally sent — the body goes out empty and the server
+      // can only say "nothing arrived". (Photos were immune because the
+      // shrink step re-encodes them; PDFs went through untouched.) Reading
+      // here makes a bad handle fail loudly while the picker is still open.
+      const bytes = await chosen.arrayBuffer();
+      if (bytes.byteLength === 0) throw new Error("read 0 bytes");
+      const solid = new File([bytes], chosen.name, {
+        type: chosen.type,
+        lastModified: chosen.lastModified,
+      });
+      const shrunk = await shrinkImage(solid);
+      if (preview) URL.revokeObjectURL(preview);
       setFile(shrunk);
       setPreview(shrunk.type.startsWith("image/") ? URL.createObjectURL(shrunk) : null);
+    } catch {
+      setFile(null);
+      setPreview(null);
+      setError(
+        "Couldn't read that file. If it's stored in iCloud, open it once in the Files app so it downloads to this device, then pick it again.",
+      );
     } finally {
       setBusy(null);
     }
+  }
+
+  async function saveRecord(payload: Record<string, unknown>) {
+    const res = await fetch("/api/receipts/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const json = await parseResponse(res);
+    if (!res.ok || !json.ok || !json.id) throw new Error(json.error ?? "Could not save.");
+    router.push(`/receipts/${json.id}`);
   }
 
   async function save() {
@@ -46,45 +107,64 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
       // and attach the picture later.
       if (!file) {
         setBusy("Saving…");
-        const res = await fetch("/api/receipts/create", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(details),
-        });
-        const json = await res.json();
-        if (!res.ok || !json.ok) throw new Error(json.error ?? "Could not save.");
-        router.push(`/receipts/${json.id}`);
+        await saveRecord(details);
         return;
       }
 
       if (blobEnabled) {
         // Straight to storage — never through a serverless body limit.
         setBusy("Uploading…");
-        const { upload } = await import("@vercel/blob/client");
-        const blob = await upload(`receipts/${file.name}`, file, {
-          access: "public",
-          handleUploadUrl: "/api/blob/token",
-          contentType: file.type || undefined,
-        });
-        setBusy("Saving…");
-        const res = await fetch("/api/receipts/create", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
+        let storageKey: string | null = null;
+        try {
+          // A hung or endlessly-retrying connection must not strand the
+          // operator forever: give the direct path a hard deadline, after
+          // which the fallback below (small files) or a real error message
+          // takes over. Scaled by size so a genuinely slow cellular upload
+          // of a big PDF isn't cut off mid-transfer. The Promise.race is the
+          // guarantee — the library's internal retry loop can sleep through
+          // an abort signal, so we stop waiting on our own clock.
+          const deadlineMs = Math.max(90_000, Math.round(file.size / 1024) * 30);
+          const { upload } = await import("@vercel/blob/client");
+          const blob = await Promise.race([
+            upload(`receipts/${file.name}`, file, {
+              access: "public",
+              handleUploadUrl: "/api/blob/token",
+              contentType: file.type || undefined,
+              abortSignal:
+                typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+                  ? AbortSignal.timeout(deadlineMs)
+                  : undefined,
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("The storage upload timed out.")), deadlineMs + 5_000),
+            ),
+          ]);
+          storageKey = blob.url;
+        } catch (e) {
+          // Direct-to-storage failed. A small file still fits through the
+          // server route, so fall through to that instead of giving up.
+          if (file.size > SERVER_ROUTE_MAX_BYTES) {
+            const reason = e instanceof Error ? e.message : "unknown error";
+            throw new Error(
+              `Direct upload to storage failed (${reason}), and the file is too big to send any other way. Try a photo of the document instead.`,
+            );
+          }
+          console.warn("[uploader] storage upload failed, using the server route:", e);
+        }
+        if (storageKey) {
+          setBusy("Saving…");
+          await saveRecord({
             ...details,
-            storageKey: blob.url,
+            storageKey,
             fileName: file.name,
             mimeType: file.type,
             fileSize: file.size,
-          }),
-        });
-        const json = await res.json();
-        if (!res.ok || !json.ok) throw new Error(json.error ?? "Could not save.");
-        router.push(`/receipts/${json.id}`);
-        return;
+          });
+          return;
+        }
       }
 
-      // Local dev / no blob store: post the file itself.
+      // Local dev, no blob store — or the fallback when direct storage failed.
       setBusy("Uploading…");
       const body = new FormData();
       body.set("file", file);
@@ -92,14 +172,14 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
         if (typeof v === "string") body.set(k, v);
       }
       const res = await fetch("/api/receipts/create", { method: "POST", body });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error ?? "Could not save.");
+      const json = await parseResponse(res);
+      if (!res.ok || !json.ok || !json.id) throw new Error(json.error ?? "Could not save.");
       router.push(`/receipts/${json.id}`);
     } catch (e) {
       setBusy(null);
       const message = e instanceof Error ? e.message : "Upload failed.";
       setError(
-        /413|too large|size/i.test(message)
+        /413|too large/i.test(message)
           ? "That file is too big to send. Try a photo instead of a scan."
           : message,
       );

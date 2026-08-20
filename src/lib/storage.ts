@@ -37,6 +37,19 @@ export type StoredFile = {
   fileSize: number;
 };
 
+// Thrown when a deployment has nowhere durable to put a file: on Vercel the
+// filesystem is read-only, so without a connected Blob store there is no
+// storage at all. The API layer maps this to a 503 whose message names the
+// real problem, instead of the generic "didn't come through".
+export class StorageNotConnectedError extends Error {
+  constructor() {
+    super(
+      "File storage isn't connected on this deployment — in Vercel open the project → Storage → connect the Blob store to all environments, then redeploy.",
+    );
+    this.name = "StorageNotConnectedError";
+  }
+}
+
 // Core writer — used by browser uploads and by the inbound-email webhook
 // (which already holds decoded Buffers, not File objects).
 export async function saveBuffer(
@@ -50,12 +63,27 @@ export async function saveBuffer(
   const generatedName = `${crypto.randomUUID()}${ext}`;
 
   if (process.env.BLOB_READ_WRITE_TOKEN) {
-    const { put } = await import("@vercel/blob");
-    const blob = await put(`receipts/${generatedName}`, bytes, {
-      access: "public",
-      contentType: type,
-    });
-    return { storageKey: blob.url, fileName: name, mimeType: type, fileSize: bytes.byteLength };
+    try {
+      const { put } = await import("@vercel/blob");
+      const blob = await put(`receipts/${generatedName}`, bytes, {
+        access: "public",
+        contentType: type,
+        // A hung storage write must fail in bounded time — the serverless
+        // function only lives 30s, and the caller has a disk fallback.
+        abortSignal: AbortSignal.timeout(20_000),
+      });
+      return { storageKey: blob.url, fileName: name, mimeType: type, fileSize: bytes.byteLength };
+    } catch (e) {
+      // On Vercel there is no disk to fall back to — surface the real cause.
+      if (process.env.VERCEL) {
+        throw new Error(
+          `Blob storage rejected the file: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+      console.error("[storage] blob write failed, using local disk instead:", e);
+    }
+  } else if (process.env.VERCEL) {
+    throw new StorageNotConnectedError();
   }
 
   await mkdir(uploadRoot(), { recursive: true });
