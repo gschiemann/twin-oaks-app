@@ -207,6 +207,17 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
         lastModified: chosen.lastModified,
       });
       const shrunk = await shrinkImage(solid);
+      // Without a Blob store every byte rides through the server, which caps
+      // out around 4 MB — say so now, while the picker is still open, instead
+      // of failing after a long upload. (Photos are already shrunk by here.)
+      if (!blobEnabled && shrunk.size > 4_000_000) {
+        setFile(null);
+        setPreview(null);
+        setError(
+          `That file is ${humanSize(shrunk.size)} — more than this deployment can take until its Blob store is connected. Take a photo of the document instead (photos shrink automatically), or connect the Blob store in Vercel for big PDFs.`,
+        );
+        return;
+      }
       if (preview) URL.revokeObjectURL(preview);
       setFile(shrunk);
       setPreview(shrunk.type.startsWith("image/") ? URL.createObjectURL(shrunk) : null);

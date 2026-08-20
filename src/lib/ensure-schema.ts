@@ -14,6 +14,16 @@ import { prisma } from "./db";
 const DDL: string[] = [
   `CREATE SCHEMA IF NOT EXISTS "public"`,
 
+  `CREATE TABLE IF NOT EXISTS "StoredFile" (
+    "id" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "mimeType" TEXT NOT NULL,
+    "size" INTEGER NOT NULL,
+    "data" BYTEA NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "StoredFile_pkey" PRIMARY KEY ("id")
+)`,
+
   `CREATE TABLE IF NOT EXISTS "Vendor" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -351,7 +361,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
     // Probe the NEWEST schema element (table OR column) — if an older
     // deploy's schema is present but anything newer is missing, the
     // idempotent DDL below fills the gap.
-    await prisma.$queryRawUnsafe(`SELECT "taxTreatment" FROM "Customer" LIMIT 1`);
+    await prisma.$queryRawUnsafe(`SELECT "id" FROM "StoredFile" LIMIT 1`);
     return { ok: true }; // schema already present
   } catch (probeErr) {
     // Something missing (or connection issue) — attempt to apply the schema.
@@ -359,7 +369,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
       for (const stmt of DDL) {
         await prisma.$executeRawUnsafe(stmt);
       }
-      await prisma.$queryRawUnsafe(`SELECT "taxTreatment" FROM "Customer" LIMIT 1`);
+      await prisma.$queryRawUnsafe(`SELECT "id" FROM "StoredFile" LIMIT 1`);
       console.log("[twin-oaks] database schema applied by self-heal");
       return { ok: true };
     } catch (healErr) {

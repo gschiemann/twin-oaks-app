@@ -136,6 +136,21 @@ model Asset {
   @@index([division])
 }
 
+// Receipt/document originals stored IN the database. This is the automatic
+// fallback when no Blob store is connected to the deployment (the Vercel
+// filesystem is read-only, so without it there'd be no file storage at all —
+// the 2026-08 "File storage isn't connected" incident). Storage keys look
+// like "db:<id>"; intake is capped by the API route (~4.5 MB on Vercel).
+// When a Blob store IS connected, new files go there instead.
+model StoredFile {
+  id        String   @id @default(cuid())
+  fileName  String
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
 // FR-007: entered once in Settings, reused on every customer-facing
 // document. Single row (id is always "singleton").
 model BusinessProfile {
