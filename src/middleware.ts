@@ -35,6 +35,6 @@ export async function middleware(req: NextRequest) {
 // (signup is public by definition — it's how a new account comes to exist.)
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|login|signup|brand/|api/health|api/inbound|api/passkeys/auth|api/cron|manifest.webmanifest|icon|apple-icon).*)",
+    "/((?!_next/static|_next/image|favicon.ico|login|signup|brand/|ocr/|api/health|api/inbound|api/passkeys/auth|api/cron|manifest.webmanifest|icon|apple-icon).*)",
   ],
 };
