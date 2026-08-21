@@ -1,16 +1,19 @@
 // FR-006: read a picked receipt and hand back form-ready field guesses.
 //
-// Two request shapes, mirroring how the file reaches us:
+// Three request shapes, mirroring how the receipt reaches us:
 //   • multipart {file}  — small files, sent directly by the browser;
 //   • JSON {src}        — big files already uploaded to blob storage at pick
-//                         time; src must be OUR OWN blob URL (SSRF guard).
+//                         time; src must be OUR OWN blob URL (SSRF guard);
+//   • JSON {text}       — text the BROWSER produced by on-device OCR
+//                         (src/lib/client-ocr.ts) after we answered
+//                         wantClientOcr — runs the same field heuristics.
 //
 // Reading strategy, cheapest first:
 //   1. PDF with a text layer → free deterministic extraction (unpdf + the
 //      same heuristics the inbound-email path uses).
-//   2. Photos and scanned PDFs → AI vision, only when ANTHROPIC_API_KEY is
-//      configured for the deployment.
-//   3. Neither available → ok:true with a note; the operator types it in.
+//   2. Photos and scanned PDFs → AI vision when ANTHROPIC_API_KEY is
+//      configured; otherwise the response says wantClientOcr and the
+//      browser reads the pixels itself with Tesseract (no key, no setup).
 //
 // Behind the login gate (middleware). Never 500s over a bad document — a scan
 // is a convenience, not a gate on saving the receipt.
@@ -25,14 +28,16 @@ export const maxDuration = 60;
 const MAX_SCAN_BYTES = 25 * 1024 * 1024;
 const MIN_USEFUL_TEXT = 40;
 
-const PHOTO_NOTE_NO_AI =
-  "Automatic reading for photos isn't set up on this deployment yet — add an Anthropic API key to turn it on. Fill in what matters below.";
-const SCANNED_PDF_NOTE_NO_AI =
-  "This PDF is a scan with no readable text, and AI reading isn't set up yet. Fill in what matters below.";
 const NOTHING_FOUND_NOTE = "Couldn't find the details automatically — fill in what matters below.";
+const MAX_OCR_TEXT = 200_000;
 
-function respond(source: string, fields: ReturnType<typeof hintsToScanFields> | null, note?: string) {
-  return Response.json({ ok: true, source, fields, note: note ?? null });
+function respond(
+  source: string,
+  fields: ReturnType<typeof hintsToScanFields> | null,
+  note?: string,
+  wantClientOcr = false,
+) {
+  return Response.json({ ok: true, source, fields, note: note ?? null, wantClientOcr });
 }
 
 async function readPdfText(bytes: Buffer): Promise<string> {
@@ -54,7 +59,16 @@ export async function POST(req: Request) {
   try {
     const contentType = req.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
-      const body = (await req.json()) as { src?: unknown };
+      const body = (await req.json()) as { src?: unknown; text?: unknown };
+      // On-device OCR output: no bytes involved, straight to the heuristics.
+      if (typeof body.text === "string") {
+        const fields = hintsToScanFields(
+          extractFromDocumentText(body.text.slice(0, MAX_OCR_TEXT)),
+        );
+        return hasAnyField(fields)
+          ? respond("ocr", fields)
+          : respond("ocr", null, NOTHING_FOUND_NOTE);
+      }
       const src = typeof body.src === "string" ? body.src : "";
       if (!isOwnBlobUrl(src)) {
         return Response.json({ ok: false, error: "Not a file this app stored." }, { status: 400 });
@@ -103,7 +117,8 @@ export async function POST(req: Request) {
           ? respond("ai", fields)
           : respond("ai", null, NOTHING_FOUND_NOTE);
       }
-      return respond("none", null, SCANNED_PDF_NOTE_NO_AI);
+      // No AI on this deployment: the browser reads the pixels itself.
+      return respond("none", null, NOTHING_FOUND_NOTE, true);
     }
 
     if (mimeType.startsWith("image/")) {
@@ -114,7 +129,7 @@ export async function POST(req: Request) {
           ? respond("ai", fields)
           : respond("ai", null, NOTHING_FOUND_NOTE);
       }
-      return respond("none", null, PHOTO_NOTE_NO_AI);
+      return respond("none", null, NOTHING_FOUND_NOTE, true);
     }
 
     return respond("none", null, NOTHING_FOUND_NOTE);

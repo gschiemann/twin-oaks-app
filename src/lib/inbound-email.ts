@@ -615,8 +615,14 @@ const BARE_AMOUNT_RE = new RegExp(`\\$\\s*${AMOUNT}`, "g");
 /** Only trust a bare "biggest dollar figure" reading if the mail looks like a receipt at all. */
 const RECEIPTISH_RE = /\b(receipt|invoice|order|payment|purchase|total)\b/i;
 
-/** `tax(es)` — the `%` follow-up is rejected at the call site ("Tax rate 8.25%"). */
-const TAX_RE = new RegExp(`(?:^|[^a-z])(?:sales\\s+)?tax(?:es)?\\b[^\\n$0-9]{0,20}\\$?\\s*${AMOUNT}`, "gi");
+/** `tax(es)` — the `%` follow-up is rejected at the call site ("Tax rate 8.25%").
+ *  The lookbehinds keep "Total BEFORE TAX: $20.99" / "pre-tax" lines — which
+ *  name the untaxed subtotal, not the tax — from being read as a tax amount
+ *  (bit an Amazon order summary on 2026-08-21). */
+const TAX_RE = new RegExp(
+  `(?:^|[^a-z])(?<!before )(?<!pre[- ])(?:sales\\s+)?tax(?:es)?\\b[^\\n$0-9]{0,20}\\$?\\s*${AMOUNT}`,
+  "gi",
+);
 
 const RECEIPT_NUMBER_RE =
   /\b(?:order|receipt|invoice|confirmation|transaction)\s*(?:#|no\.?|number|id)\s*:?\s*([A-Za-z0-9][A-Za-z0-9-]{3,24})/i;

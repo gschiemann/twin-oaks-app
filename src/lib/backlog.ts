@@ -101,7 +101,7 @@ export const BACKLOG: BacklogItem[] = [
     priority: "HIGH",
     status: "WORKING",
     devNotes:
-      "Done: photo/PDF upload (see BUG-002), forwarded-email import with vendor/date/total/tax/number extraction, original always stored, duplicate suppression on email, assign-to-asset on the expense. NEW in v3.5: picking a file on Add receipt reads it and pre-fills vendor/date/total/tax/receipt# for review — PDFs with a text layer are read for free on the spot; photos and scanned PDFs are read by AI once an Anthropic API key is added to the deployment (until then a note says so). Open: line-item and shipping extraction, category suggestion from vendor history, drag-and-drop on desktop, bank CSV import and matching.",
+      "Done: photo/PDF upload (see BUG-002), forwarded-email import with vendor/date/total/tax/number extraction, original always stored, duplicate suppression on email, assign-to-asset on the expense. NEW in v3.5: picking a file on Add receipt reads it and pre-fills vendor/date/total/tax/receipt# for review — PDFs with a text layer are read for free on the spot. v4.3 made scans and photos work with ZERO setup: when there is no text layer, the device itself reads the pixels (built-in OCR, all assets shipped with the app — no key, no external service), and an Anthropic API key remains an optional accuracy upgrade the server prefers when present. Open: line-item and shipping extraction, category suggestion from vendor history, drag-and-drop on desktop, bank CSV import and matching.",
   },
   {
     kind: "FR",

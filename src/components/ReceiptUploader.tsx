@@ -163,12 +163,42 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
         ok: boolean;
         fields?: ScanFields | null;
         note?: string | null;
+        wantClientOcr?: boolean;
       };
       if (seq !== scanSeq.current) return;
       if (json.ok && json.fields) {
         const filled = applyScanFields(json.fields);
         setScanFilled(filled);
         if (filled.length === 0 && json.note) setScanNote(json.note);
+      } else if (json.wantClientOcr) {
+        // No text layer and no server-side AI: read the pixels right here on
+        // the device (Tesseract, self-hosted — no key, no setup).
+        const { ocrFile } = await import("@/lib/client-ocr");
+        const text = await ocrFile(f);
+        if (seq !== scanSeq.current) return;
+        if (text && text.trim().length >= 12) {
+          const res2 = await fetch("/api/receipts/scan", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          if (seq !== scanSeq.current) return;
+          const json2 = (await res2.json()) as {
+            ok: boolean;
+            fields?: ScanFields | null;
+            note?: string | null;
+          };
+          if (seq !== scanSeq.current) return;
+          if (json2.ok && json2.fields) {
+            const filled = applyScanFields(json2.fields);
+            setScanFilled(filled);
+            if (filled.length === 0) setScanNote(json2.note ?? null);
+          } else {
+            setScanNote(json2.note ?? "Couldn't find the details automatically — fill in what matters below.");
+          }
+        } else {
+          setScanNote("Couldn't make out the text on this one — fill in what matters below.");
+        }
       } else if (json.note) {
         setScanNote(json.note);
       }
@@ -369,7 +399,7 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
 
       {scanning ? (
         <p className="mb-3 rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-600">
-          🔎 Reading the receipt…
+          🔎 Reading the receipt… a scanned or photographed one can take a few extra seconds.
         </p>
       ) : scanFilled.length > 0 ? (
         <p className="mb-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
