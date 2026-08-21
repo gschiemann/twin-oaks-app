@@ -7,6 +7,7 @@
 // Never throws; every failure path returns null.
 
 import type { ReceiptHints } from "@/lib/inbound-email";
+import type { ExtraHints } from "@/lib/receipt-extract";
 
 const MODEL = "claude-haiku-4-5";
 const API_URL = "https://api.anthropic.com/v1/messages";
@@ -25,8 +26,8 @@ export function aiCanRead(mimeType: string): boolean {
 }
 
 const PROMPT = `This is a receipt, invoice, order confirmation, or packing slip. Extract these fields and answer with STRICT JSON only — no prose, no markdown fence:
-{"vendorName": string|null, "receiptDate": "YYYY-MM-DD"|null, "totalDollars": number|null, "salesTaxDollars": number|null, "receiptNumber": string|null}
-Rules: vendorName is the merchant/seller, never the buyer or shipping carrier. receiptDate is the purchase/order date. totalDollars is the grand total actually charged (not subtotal). salesTaxDollars only if a tax amount is printed. receiptNumber is the order/receipt/invoice number. Use null for anything not clearly present — never guess.`;
+{"vendorName": string|null, "receiptDate": "YYYY-MM-DD"|null, "totalDollars": number|null, "salesTaxDollars": number|null, "receiptNumber": string|null, "paymentMethod": "Card"|"Cash"|"Check"|"Bank transfer"|"PayPal / Venmo"|"Financing"|"Other"|null, "itemsSummary": string|null}
+Rules: vendorName is the merchant/seller, never the buyer or shipping carrier. receiptDate is the purchase/order date. totalDollars is the grand total actually charged (not subtotal). salesTaxDollars only if a tax amount is printed. receiptNumber is the order/receipt/invoice number. paymentMethod maps how it was paid onto exactly one of the listed values (any credit/debit card, Apple/Google Pay → "Card"). itemsSummary is one short line describing what was bought (max ~25 words). Use null for anything not clearly present — never guess.`;
 
 type AiJson = {
   vendorName?: unknown;
@@ -34,7 +35,19 @@ type AiJson = {
   totalDollars?: unknown;
   salesTaxDollars?: unknown;
   receiptNumber?: unknown;
+  paymentMethod?: unknown;
+  itemsSummary?: unknown;
 };
+
+const AI_PAYMENT_METHODS = new Set([
+  "Card",
+  "Cash",
+  "Check",
+  "Bank transfer",
+  "PayPal / Venmo",
+  "Financing",
+  "Other",
+]);
 
 function asCleanString(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
@@ -57,7 +70,10 @@ function toLocalNoonDate(v: unknown): Date | null {
   return date;
 }
 
-export async function aiExtractReceipt(bytes: Buffer, mimeType: string): Promise<ReceiptHints | null> {
+export async function aiExtractReceipt(
+  bytes: Buffer,
+  mimeType: string,
+): Promise<(ReceiptHints & ExtraHints) | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || !aiCanRead(mimeType) || bytes.byteLength === 0 || bytes.byteLength > MAX_AI_BYTES) {
     return null;
@@ -101,12 +117,18 @@ export async function aiExtractReceipt(bytes: Buffer, mimeType: string): Promise
     if (salesTaxCents !== null && totalCents !== null && salesTaxCents >= totalCents) {
       salesTaxCents = null;
     }
+    const paymentMethod =
+      typeof parsed.paymentMethod === "string" && AI_PAYMENT_METHODS.has(parsed.paymentMethod)
+        ? parsed.paymentMethod
+        : null;
     return {
       vendorName: asCleanString(parsed.vendorName, 60),
       receiptDate: toLocalNoonDate(parsed.receiptDate),
       totalCents,
       salesTaxCents,
       receiptNumber: asCleanString(parsed.receiptNumber, 40),
+      paymentMethod,
+      notes: asCleanString(parsed.itemsSummary, 200),
     };
   } catch (e) {
     console.error("[receipt-ai] extraction failed:", e);

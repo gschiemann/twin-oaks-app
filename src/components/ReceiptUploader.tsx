@@ -47,6 +47,8 @@ type ScanFields = {
   total: string | null;
   salesTax: string | null;
   receiptNumber: string | null;
+  paymentMethod: string | null;
+  notes: string | null;
 };
 
 const SCAN_LABELS: [keyof ScanFields, string][] = [
@@ -55,6 +57,8 @@ const SCAN_LABELS: [keyof ScanFields, string][] = [
   ["total", "total"],
   ["salesTax", "sales tax"],
   ["receiptNumber", "receipt #"],
+  ["paymentMethod", "payment method"],
+  ["notes", "notes"],
 ];
 
 function localToday(offsetDays = 0): string {
@@ -78,6 +82,14 @@ function applyScanFields(fields: ScanFields): string[] {
     const value = fields[name];
     if (!value) continue;
     const el = form.elements.namedItem(name);
+    if (el instanceof HTMLSelectElement) {
+      // Selects (payment method) only accept their own option values.
+      if (el.value !== "" ) continue;
+      if (![...el.options].some((o) => o.value === value)) continue;
+      el.value = value;
+      filled.push(label);
+      continue;
+    }
     if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) continue;
     const current = el.value.trim();
     const isDefaultDate = name === "receiptDate" && defaults.has(current);
@@ -88,8 +100,14 @@ function applyScanFields(fields: ScanFields): string[] {
   }
 
   if (filled.length > 0) {
+    // Open the details section AND bring it into view — reviewing the filled
+    // fields must never cost an extra tap or a hunt up the page.
     const details = form.querySelector("details");
-    if (details) details.open = true;
+    if (details) {
+      details.open = true;
+      details.setAttribute("open", "");
+    }
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   return filled;
 }
