@@ -122,7 +122,7 @@ export default async function ReceiptDetailPage({
           href={`/expenses/new?fromReceipt=${receipt.id}`}
           className={`${btnPrimaryCls} mb-4 w-full`}
         >
-          Categorize → create expense
+          File this receipt into Expenses
         </Link>
       )}
 

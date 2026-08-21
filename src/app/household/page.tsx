@@ -19,7 +19,9 @@ import {
 import {
   Card,
   EmptyState,
+  FormError,
   PageHeader,
+  SavedBanner,
   StatCard,
   btnPrimaryCls,
   btnSecondaryCls,
@@ -33,10 +35,10 @@ export const dynamic = "force-dynamic";
 export default async function HouseholdPage({
   searchParams,
 }: {
-  searchParams: Promise<{ m?: string; error?: string; saved?: string }>;
+  searchParams: Promise<{ m?: string; error?: string; saved?: string; added?: string }>;
 }) {
   const accountId = await requireAccountId();
-  const { m, error, saved } = await searchParams;
+  const { m, error, saved, added } = await searchParams;
   const month = monthOf(m);
   const isCurrentMonth = month.key === monthOf().key;
 
@@ -115,15 +117,17 @@ export default async function HouseholdPage({
         }
       />
 
-      {saved ? (
-        <Card className="mb-4 border-oak-200 bg-oak-50 text-sm font-medium text-oak-900">
-          ✅ Budgets saved.
-        </Card>
+      {saved ? <SavedBanner title="Budgets saved." /> : null}
+      {added ? (
+        <SavedBanner
+          title="Added to Household."
+          hint="It's in this month's list below and counted in the totals above."
+        />
       ) : null}
       {error ? (
-        <Card className="mb-4 border-red-200 bg-red-50 text-sm font-medium text-red-700">
+        <FormError>
           {error === "amount" ? "Enter an amount first." : "Pick a category first."}
-        </Card>
+        </FormError>
       ) : null}
 
       <div className="mb-3 flex items-center justify-between">

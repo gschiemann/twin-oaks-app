@@ -4,7 +4,7 @@ import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { RECEIPT_STATUS_LABELS, type ReceiptStatus } from "@/lib/domain";
-import { Card, Chip, EmptyState, PageHeader, btnPrimaryCls } from "@/components/ui";
+import { Card, Chip, EmptyState, PageHeader, SavedBanner, btnPrimaryCls } from "@/components/ui";
 import { ReceiptThumb, receiptStatusTone } from "./receipt-bits";
 
 export const dynamic = "force-dynamic";
@@ -18,10 +18,10 @@ const TABS = [
 export default async function ReceiptsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; saved?: string }>;
+  searchParams: Promise<{ tab?: string; saved?: string; categorized?: string; updated?: string }>;
 }) {
   const accountId = await requireAccountId();
-  const { tab = "inbox", saved } = await searchParams;
+  const { tab = "inbox", saved, categorized, updated } = await searchParams;
 
   const where = {
     accountId,
@@ -54,9 +54,26 @@ export default async function ReceiptsPage({
       />
 
       {saved ? (
-        <Card className="mb-4 border-oak-200 bg-oak-50 text-sm font-medium text-oak-900">
-          ✅ Receipt saved.
-        </Card>
+        <SavedBanner
+          title="Receipt saved."
+          hint="It's in your Inbox below — no rush, you can categorize it any time."
+          actionHref="/receipts/new"
+          actionLabel="Add another receipt"
+        />
+      ) : null}
+
+      {updated ? (
+        <SavedBanner
+          title="Receipt updated."
+          hint="Your changes are saved. It's in the list below."
+        />
+      ) : null}
+
+      {categorized ? (
+        <SavedBanner
+          title="Receipt filed."
+          hint="It's recorded under Expenses. Tap the next receipt below to file that one too."
+        />
       ) : null}
 
       <div className="mb-4 flex gap-2">

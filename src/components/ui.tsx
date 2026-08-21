@@ -86,6 +86,58 @@ export function StatCard({
   );
 }
 
+// The other half of the save rule: a form that REFUSES to save must always
+// say why, in plain words. Never bounce back to a silent blank screen.
+export function FormError({ children }: { children: ReactNode }) {
+  return (
+    <Card className="mb-4 border-2 border-red-300 bg-red-50">
+      <p className="text-base font-semibold text-red-900">That didn&apos;t save.</p>
+      <p className="mt-1 text-sm text-red-800">{children}</p>
+    </Card>
+  );
+}
+
+// THE SAVE RULE: every save in this app lands back on the list it belongs to,
+// with this banner at the top of it. One look, one place, everywhere — so
+// nobody is ever left on a page wondering whether it worked or what to do next.
+export function SavedBanner({
+  title,
+  hint,
+  actionHref,
+  actionLabel,
+}: {
+  title: string;
+  hint?: string;
+  actionHref?: string;
+  actionLabel?: string;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mb-4 rounded-2xl border-2 border-oak-500 bg-oak-50 p-4 shadow-sm"
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-oak-700 text-lg font-bold text-white"
+        >
+          ✓
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-semibold text-oak-900">{title}</p>
+          {hint ? <p className="mt-0.5 text-sm text-stone-600">{hint}</p> : null}
+          {actionHref && actionLabel ? (
+            <Link href={actionHref} className={`${btnPrimaryCls} mt-3`}>
+              {actionLabel}
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function EmptyState({
   title,
   hint,

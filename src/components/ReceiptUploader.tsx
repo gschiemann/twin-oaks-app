@@ -307,7 +307,7 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
     });
     const json = await parseResponse(res);
     if (!res.ok || !json.ok || !json.id) throw new Error(json.error ?? "Could not save.");
-    router.push(`/receipts/${json.id}`);
+    router.push("/receipts?saved=1");
   }
 
   async function save() {
@@ -366,7 +366,7 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
       const res = await fetch("/api/receipts/create", { method: "POST", body });
       const json = await parseResponse(res);
       if (!res.ok || !json.ok || !json.id) throw new Error(json.error ?? "Could not save.");
-      router.push(`/receipts/${json.id}`);
+      router.push("/receipts?saved=1");
     } catch (e) {
       setBusy(null);
       const message = e instanceof Error ? e.message : "Upload failed.";
@@ -460,9 +460,9 @@ export default function ReceiptUploader({ blobEnabled }: Props) {
         type="button"
         onClick={save}
         disabled={busy !== null}
-        className={`${btnPrimaryCls} w-full disabled:opacity-60`}
+        className={`${file ? btnPrimaryCls : btnSecondaryCls} w-full disabled:opacity-60`}
       >
-        {busy ?? (file ? "Save to Inbox" : "Save without a picture")}
+        {busy ?? (file ? "Save to Inbox" : "Save with no picture — I\u2019ll add it later")}
       </button>
     </div>
   );

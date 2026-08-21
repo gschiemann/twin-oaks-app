@@ -4,7 +4,7 @@ import { OWNER_ACCOUNT_ID, requireAccountId } from "@/lib/auth";
 import { getBusinessProfile } from "@/lib/business";
 import { formatCents } from "@/lib/money";
 import { formatDate, startOfMonth, startOfYear } from "@/lib/dates";
-import { Card, Chip, PageHeader, StatCard, divisionTone } from "@/components/ui";
+import { Card, Chip, EmptyState, PageHeader, StatCard, divisionTone } from "@/components/ui";
 import { DIVISION_LABELS, type Division } from "@/lib/domain";
 import { ensureSchema } from "@/lib/ensure-schema";
 
@@ -116,6 +116,15 @@ export default async function DashboardPage() {
   return (
     <div>
       <PageHeader title={profile.name} sub={monthLabel} />
+
+      {inboxCount === 0 && recentExpenses.length === 0 && recentIncome.length === 0 ? (
+        <EmptyState
+          title="Nothing recorded yet."
+          hint="Start with a receipt — snap it now, sort it out later."
+          actionHref="/receipts/new"
+          actionLabel="Add your first receipt"
+        />
+      ) : null}
 
       {inboxCount > 0 ? (
         <Link href="/receipts" className="mb-4 block">

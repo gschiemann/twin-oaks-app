@@ -65,14 +65,25 @@ async function expenseDataFromForm(accountId: string, formData: FormData) {
 
 export async function createExpense(formData: FormData) {
   const accountId = await requireAccountId();
+  // Categorizing straight from a receipt links the original document and
+  // completes the Inbox → Categorized flow (SPEC §4). Read BEFORE the
+  // validation bounce below, so a typo'd amount can't silently orphan the
+  // receipt it came from.
+  const fromReceiptId = str(formData.get("fromReceiptId"));
   const data = await expenseDataFromForm(accountId, formData);
-  if (!data) redirect("/expenses/new?error=missing");
+  if (!data) {
+    // Hand the typed values straight back so nothing has to be retyped.
+    const back = new URLSearchParams({ error: "missing" });
+    if (fromReceiptId) back.set("fromReceipt", fromReceiptId);
+    for (const [key, field] of [["d", "description"], ["v", "vendorName"], ["a", "amount"]]) {
+      const value = str(formData.get(field));
+      if (value) back.set(key, value.slice(0, 200));
+    }
+    redirect(`/expenses/new?${back.toString()}`);
+  }
 
   const expense = await prisma.expense.create({ data });
 
-  // Categorizing straight from a receipt links the original document and
-  // completes the Inbox → Categorized flow (SPEC §4).
-  const fromReceiptId = str(formData.get("fromReceiptId"));
   if (fromReceiptId) {
     await prisma.receipt
       .updateMany({
@@ -88,7 +99,9 @@ export async function createExpense(formData: FormData) {
       .catch(() => {}); // receipt may have been archived meanwhile — expense still stands
   }
 
-  redirect(`/expenses/${expense.id}`);
+  // Categorizing from the Inbox drops you back in the Inbox to do the next
+  // one; everything else lands on the Expenses list. Never a dead-end page.
+  redirect(fromReceiptId ? "/receipts?categorized=1" : "/expenses?saved=1");
 }
 
 export async function updateExpense(formData: FormData) {
@@ -99,7 +112,7 @@ export async function updateExpense(formData: FormData) {
   if (!data) redirect(`/expenses/${id}/edit?error=missing`);
 
   await prisma.expense.updateMany({ where: { id, accountId }, data });
-  redirect(`/expenses/${id}`);
+  redirect("/expenses?saved=1");
 }
 
 export async function deleteExpense(formData: FormData) {

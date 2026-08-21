@@ -42,7 +42,7 @@ export async function createIncome(formData: FormData) {
   const data = incomeDataFromForm(formData);
   if (!data) redirect("/income/new?error=missing");
   await prisma.income.create({ data: { ...data, accountId } });
-  redirect("/income");
+  redirect("/income?saved=1");
 }
 
 export async function updateIncome(formData: FormData) {
@@ -52,7 +52,7 @@ export async function updateIncome(formData: FormData) {
   const data = incomeDataFromForm(formData);
   if (!data) redirect(`/income/${id}?error=missing`);
   await prisma.income.updateMany({ where: { id, accountId }, data });
-  redirect("/income");
+  redirect("/income?saved=1");
 }
 
 export async function deleteIncome(formData: FormData) {

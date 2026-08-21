@@ -1,7 +1,15 @@
 import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
 import { formatDate, startOfYear, toDateInputValue } from "@/lib/dates";
-import { Card, PageHeader, StatCard, btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
+import {
+  Card,
+  PageHeader,
+  SavedBanner,
+  StatCard,
+  btnPrimaryCls,
+  inputCls,
+  labelCls,
+} from "@/components/ui";
 import { createMileage, deleteMileage } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -13,10 +21,10 @@ function fmtMiles(n: number): string {
 export default async function MileagePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   const accountId = await requireAccountId();
-  const { error } = await searchParams;
+  const { error, saved } = await searchParams;
   const yearStart = startOfYear();
 
   const [trips, vehicles, ytd] = await Promise.all([
@@ -43,6 +51,13 @@ export default async function MileagePage({
         title="Mileage"
         sub="Every business trip logged — the deduction rate is your accountant's call."
       />
+
+      {saved ? (
+        <SavedBanner
+          title="Trip saved."
+          hint="It's counted in your miles for the year. Log the next one below."
+        />
+      ) : null}
 
       <div className="mb-4 grid grid-cols-2 gap-2">
         <StatCard label="Miles YTD" value={fmtMiles(milesYtd)} />

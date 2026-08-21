@@ -4,12 +4,25 @@ import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { DIVISION_LABELS, type Division } from "@/lib/domain";
-import { Card, Chip, EmptyState, PageHeader, btnPrimaryCls, divisionTone } from "@/components/ui";
+import {
+  Card,
+  Chip,
+  EmptyState,
+  PageHeader,
+  SavedBanner,
+  btnPrimaryCls,
+  divisionTone,
+} from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
-export default async function IncomePage() {
+export default async function IncomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ saved?: string }>;
+}) {
   const accountId = await requireAccountId();
+  const { saved } = await searchParams;
   const [incomes, total] = await Promise.all([
     prisma.income.findMany({ where: { accountId }, orderBy: { date: "desc" }, take: 200 }),
     prisma.income.aggregate({ where: { accountId }, _sum: { amountCents: true } }),
@@ -38,6 +51,15 @@ export default async function IncomePage() {
           </Link>
         }
       />
+
+      {saved ? (
+        <SavedBanner
+          title="Income saved."
+          hint="It's in the list below and counted in your totals."
+          actionHref="/income/new"
+          actionLabel="Add more income"
+        />
+      ) : null}
 
       {incomes.length === 0 ? (
         <EmptyState

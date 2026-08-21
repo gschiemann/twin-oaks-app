@@ -57,7 +57,7 @@ export async function createAsset(formData: FormData) {
   const data = assetDataFromForm(formData);
   if (!data) redirect("/assets/new?error=missing");
   const asset = await prisma.asset.create({ data: { ...data, accountId } });
-  redirect(`/assets/${asset.id}`);
+  redirect("/assets?saved=1");
 }
 
 export async function updateAsset(formData: FormData) {
@@ -67,7 +67,7 @@ export async function updateAsset(formData: FormData) {
   const data = assetDataFromForm(formData);
   if (!data) redirect(`/assets/${id}/edit?error=missing`);
   await prisma.asset.updateMany({ where: { id, accountId }, data });
-  redirect(`/assets/${id}`);
+  redirect("/assets?saved=1");
 }
 
 export async function addMaintenance(formData: FormData) {

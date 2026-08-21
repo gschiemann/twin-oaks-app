@@ -54,7 +54,10 @@ export async function addHouseholdExpense(formData: FormData) {
   if (parsed.error) redirect(`${backTo(formData)}&error=${parsed.error}`);
 
   await prisma.householdExpense.create({ data: { accountId, ...parsed.data } });
-  redirect(backTo(formData));
+  // Same rule as the rest of the app: never leave them staring at a form that
+  // looks untouched, wondering whether to tap Add again.
+  const back = backTo(formData);
+  redirect(`${back}${back.includes("?") ? "&" : "?"}added=1`);
 }
 
 export async function updateHouseholdExpense(formData: FormData) {

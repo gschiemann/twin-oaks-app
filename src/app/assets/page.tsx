@@ -4,13 +4,26 @@ import { requireAccountId } from "@/lib/auth";
 import { formatCents } from "@/lib/money";
 import { startOfYear } from "@/lib/dates";
 import { DIVISION_LABELS, type Division } from "@/lib/domain";
-import { Card, Chip, EmptyState, PageHeader, btnPrimaryCls, divisionTone } from "@/components/ui";
+import {
+  Card,
+  Chip,
+  EmptyState,
+  PageHeader,
+  SavedBanner,
+  btnPrimaryCls,
+  divisionTone,
+} from "@/components/ui";
 import { TractorIcon, ChevronRightIcon } from "@/components/Icons";
 
 export const dynamic = "force-dynamic";
 
-export default async function AssetsPage() {
+export default async function AssetsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ saved?: string }>;
+}) {
   const accountId = await requireAccountId();
+  const { saved } = await searchParams;
   const [assets, maintYtd, maintAll] = await Promise.all([
     prisma.asset.findMany({ where: { accountId }, orderBy: [{ division: "asc" }, { name: "asc" }] }),
     prisma.maintenanceRecord.groupBy({
@@ -43,6 +56,15 @@ export default async function AssetsPage() {
           </Link>
         }
       />
+
+      {saved ? (
+        <SavedBanner
+          title="Equipment saved."
+          hint="Tap it below any time to log maintenance or repairs."
+          actionHref="/assets/new"
+          actionLabel="Add more equipment"
+        />
+      ) : null}
 
       {assets.length === 0 ? (
         <EmptyState

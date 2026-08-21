@@ -147,6 +147,17 @@ export const BACKLOG: BacklogItem[] = [
     devNotes:
       "Settings → Business profile, including the default tax rate and logo upload. Details are frozen onto an invoice when it is marked sent, so past documents never change. The printed brand lockup is the default document logo.",
   },
+  {
+    kind: "UI",
+    number: 2,
+    title: "Saving left you on a page with no obvious next step",
+    description:
+      "Saving a receipt landed on that receipt's own page instead of returning to the receipts list, with nothing telling you the save worked or what to do next. The same dead-end existed after saving an expense, a customer, a piece of equipment and a ticket.",
+    priority: "HIGH",
+    status: "READY_FOR_TESTING",
+    devNotes:
+      "One rule now covers the whole app: every save returns to the list that item belongs to and shows a green confirmation banner at the top saying what was saved, where it went, and offering a one-tap 'add another'. Applies to receipts, expenses, income, equipment, mileage, customers and tickets. Categorizing a receipt from the Inbox returns to the Inbox (not the expense) so a stack of receipts can be worked through without navigating back each time. Invoices are the deliberate exception — a draft's next step (send it) lives on the invoice itself. Shared SavedBanner component in src/components/ui.tsx; role=\"status\" + aria-live so it is announced, not just seen. The other half of the rule shipped with it: a form that REFUSES to save now always says why in plain words (shared FormError) instead of bouncing to a blank screen — Expenses, Income, Equipment and Customers all silently swallowed that before, and on Expenses the typed description, vendor and amount now come back with the message so nothing has to be retyped (a mistyped amount also no longer drops the receipt the expense was being created from). Also: adding a household entry now confirms (it looked untouched, inviting a duplicate), Household lights up a bottom tab and is reachable from More, categorizing a receipt pre-fills the required Description from what the scan read, an empty dashboard points at Add your first receipt, and the no-picture button is no longer the big green one.",
+  },
 ];
 
 export function refOf(item: { kind: string; number: number }): string {

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
 import { getBusinessProfile } from "@/lib/business";
-import { Card, PageHeader } from "@/components/ui";
+import { Card, FormError, PageHeader } from "@/components/ui";
 import { ReceiptThumb } from "../../receipts/receipt-bits";
 import { formatCents } from "@/lib/money";
 import ExpenseForm from "../ExpenseForm";
@@ -12,10 +12,17 @@ export const dynamic = "force-dynamic";
 export default async function NewExpensePage({
   searchParams,
 }: {
-  searchParams: Promise<{ fromReceipt?: string; assetId?: string }>;
+  searchParams: Promise<{
+    fromReceipt?: string;
+    assetId?: string;
+    error?: string;
+    d?: string;
+    v?: string;
+    a?: string;
+  }>;
 }) {
   const accountId = await requireAccountId();
-  const { fromReceipt, assetId } = await searchParams;
+  const { fromReceipt, assetId, error, d, v, a } = await searchParams;
 
   const [vendors, assets, receipt, profile] = await Promise.all([
     prisma.vendor.findMany({ where: { accountId }, orderBy: { name: "asc" }, select: { name: true } }),
@@ -36,6 +43,13 @@ export default async function NewExpensePage({
         title={receipt ? "Categorize receipt" : "Add expense"}
         sub="Every dollar out gets a record, a category, and (ideally) a receipt."
       />
+
+      {error ? (
+        <FormError>
+          The Amount needs to be numbers only (like 42.75) and the Description can&apos;t be blank.
+          What you typed is still here — fix those two and tap Save expense again.
+        </FormError>
+      ) : null}
 
       {receipt ? (
         <Card className="mb-4 flex items-center gap-3 border-oak-200 bg-oak-50">
@@ -58,7 +72,16 @@ export default async function NewExpensePage({
           divisions={profile.divisions}
           fromReceiptId={receipt?.id}
           defaults={{
-            vendorName: receipt?.vendorName,
+            vendorName: v ?? receipt?.vendorName,
+            // The scan already worked out what was bought — don't make the
+            // operator invent prose for a required field on the one screen
+            // they reached by tapping "Categorize".
+            description:
+              d ??
+              (receipt?.notes && receipt.notes.length <= 70
+                ? receipt.notes
+                : (receipt?.vendorName ?? undefined)),
+            amountRaw: a,
             amountCents: receipt?.totalCents,
             salesTaxCents: receipt?.salesTaxCents,
             paymentMethod: receipt?.paymentMethod,

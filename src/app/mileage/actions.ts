@@ -67,7 +67,7 @@ export async function createMileage(formData: FormData) {
     }
   }
 
-  redirect("/mileage");
+  redirect("/mileage?saved=1");
 }
 
 export async function deleteMileage(formData: FormData) {

@@ -16,6 +16,9 @@ type Defaults = {
   vendorName?: string | null;
   description?: string | null;
   amountCents?: number | null;
+  // Exactly what was typed, handed back after a rejected save so the operator
+  // can see and fix their typo instead of retyping the whole form.
+  amountRaw?: string | null;
   salesTaxCents?: number | null;
   paymentMethod?: string | null;
   division?: string | null;
@@ -76,7 +79,7 @@ export default function ExpenseForm({
             inputMode="decimal"
             required
             placeholder="$0.00"
-            defaultValue={cents(defaults.amountCents)}
+            defaultValue={defaults.amountRaw ?? cents(defaults.amountCents)}
             className={inputCls}
           />
         </div>

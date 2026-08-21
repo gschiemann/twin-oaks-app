@@ -3,7 +3,15 @@ import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
 import { ensureBacklogTickets } from "@/lib/backlog";
 import { formatDate } from "@/lib/dates";
-import { Card, Chip, EmptyState, PageHeader, StatCard, btnPrimaryCls } from "@/components/ui";
+import {
+  Card,
+  Chip,
+  EmptyState,
+  PageHeader,
+  SavedBanner,
+  StatCard,
+  btnPrimaryCls,
+} from "@/components/ui";
 import {
   KIND_LABELS,
   PRIORITY_LABELS,
@@ -36,7 +44,7 @@ function hrefFor(status: string, kind: string): string {
 export default async function TicketsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; kind?: string }>;
+  searchParams: Promise<{ status?: string; kind?: string; saved?: string }>;
 }) {
   // The written backlog lives in code (src/lib/backlog.ts); anything missing
   // from this tracker is created here, since the seed script only ever runs
@@ -44,7 +52,7 @@ export default async function TicketsPage({
   const accountId = await requireAccountId();
   await ensureBacklogTickets();
 
-  const { status: statusParam, kind: kindParam } = await searchParams;
+  const { status: statusParam, kind: kindParam, saved } = await searchParams;
   const status =
     statusParam && (TICKET_STATUSES as readonly string[]).includes(statusParam)
       ? statusParam
@@ -83,6 +91,10 @@ export default async function TicketsPage({
           </Link>
         }
       />
+
+      {saved ? (
+        <SavedBanner title="Ticket saved." hint="It's in the list below." />
+      ) : null}
 
       <div className="mb-4 grid grid-cols-2 gap-2">
         <StatCard

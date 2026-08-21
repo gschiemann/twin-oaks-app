@@ -55,7 +55,7 @@ export async function createTicket(formData: FormData) {
     },
   });
 
-  redirect(`/tickets/${ticket.id}`);
+  redirect("/tickets?saved=1");
 }
 
 export async function updateTicket(formData: FormData) {
@@ -80,7 +80,7 @@ export async function updateTicket(formData: FormData) {
     },
   });
 
-  redirect(`/tickets/${id}`);
+  redirect("/tickets?saved=1");
 }
 
 export async function deleteTicket(formData: FormData) {

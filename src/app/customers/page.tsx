@@ -2,14 +2,19 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
 import { formatCents } from "@/lib/money";
-import { Card, EmptyState, PageHeader, btnPrimaryCls } from "@/components/ui";
+import { Card, EmptyState, PageHeader, SavedBanner, btnPrimaryCls } from "@/components/ui";
 import { ChevronRightIcon } from "@/components/Icons";
 import { outstandingCentsOf, paidCentsOf } from "../invoices/invoice-bits";
 
 export const dynamic = "force-dynamic";
 
-export default async function CustomersPage() {
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ saved?: string }>;
+}) {
   const accountId = await requireAccountId();
+  const { saved } = await searchParams;
   const customers = await prisma.customer.findMany({
     where: { accountId },
     orderBy: { name: "asc" },
@@ -27,6 +32,15 @@ export default async function CustomersPage() {
           </Link>
         }
       />
+
+      {saved ? (
+        <SavedBanner
+          title="Customer saved."
+          hint="They're in the list below — you can invoice them from the Invoices page."
+          actionHref="/customers/new"
+          actionLabel="Add another customer"
+        />
+      ) : null}
 
       {customers.length === 0 ? (
         <EmptyState

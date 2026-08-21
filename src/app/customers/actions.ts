@@ -46,7 +46,7 @@ export async function createCustomer(formData: FormData) {
 
   // Entering a customer mid-invoice? Bounce straight back into that flow.
   const returnTo = str(formData.get("returnTo"));
-  redirect(returnTo === "invoice" ? "/invoices/new" : `/customers/${customer.id}`);
+  redirect(returnTo === "invoice" ? "/invoices/new" : "/customers?saved=1");
 }
 
 export async function updateCustomer(formData: FormData) {
@@ -56,7 +56,7 @@ export async function updateCustomer(formData: FormData) {
   const data = customerDataFromForm(formData);
   if (!data) redirect(`/customers/${id}/edit?error=missing`);
   await prisma.customer.updateMany({ where: { id, accountId }, data });
-  redirect(`/customers/${id}`);
+  redirect("/customers?saved=1");
 }
 
 // Customers with invoices are financial history — they can't be deleted.

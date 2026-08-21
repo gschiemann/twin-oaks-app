@@ -31,7 +31,7 @@ export default function NewReceiptPage() {
         <form id="receipt-details">
           <details className="mb-4 rounded-xl border border-stone-200 bg-stone-50 p-3">
             <summary className="cursor-pointer text-sm font-medium text-stone-700">
-              Add details now (optional)
+              Vendor, date and total — tap to fill in now
             </summary>
             <div className="mt-3 space-y-3">
               <div>

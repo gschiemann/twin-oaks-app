@@ -5,7 +5,15 @@ import { getBusinessProfile } from "@/lib/business";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { DIVISION_LABELS, TAX_STATUS_LABELS, type Division, type TaxStatus } from "@/lib/domain";
-import { Card, Chip, EmptyState, PageHeader, btnPrimaryCls, divisionTone } from "@/components/ui";
+import {
+  Card,
+  Chip,
+  EmptyState,
+  PageHeader,
+  SavedBanner,
+  btnPrimaryCls,
+  divisionTone,
+} from "@/components/ui";
 import { taxStatusTone } from "./expense-bits";
 
 export const dynamic = "force-dynamic";
@@ -13,10 +21,10 @@ export const dynamic = "force-dynamic";
 export default async function ExpensesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ division?: string; year?: string }>;
+  searchParams: Promise<{ division?: string; year?: string; saved?: string }>;
 }) {
   const accountId = await requireAccountId();
-  const { division = "ALL", year } = await searchParams;
+  const { division = "ALL", year, saved } = await searchParams;
   const taxYear = year ? Number(year) : undefined;
 
   const profile = await getBusinessProfile(accountId);
@@ -70,6 +78,15 @@ export default async function ExpensesPage({
           </Link>
         }
       />
+
+      {saved ? (
+        <SavedBanner
+          title="Expense saved."
+          hint="It's in the list below and counted in your totals."
+          actionHref="/expenses/new"
+          actionLabel="Add another expense"
+        />
+      ) : null}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {DIVISION_TABS.map((d) => (
