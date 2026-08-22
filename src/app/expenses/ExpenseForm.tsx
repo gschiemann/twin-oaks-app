@@ -38,15 +38,22 @@ export default function ExpenseForm({
   vendors,
   assets,
   fromReceiptId,
+  fromBankTxnId,
   divisions,
+  categoryNote,
 }: {
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
   defaults?: Defaults;
   vendors: string[];
   assets: { id: string; name: string }[];
+  /** Set when this expense is being created from a bank line at /banking. */
+  fromBankTxnId?: string;
   fromReceiptId?: string;
   divisions: Division[];
+  /** FR-006 — a quiet "you usually file this vendor under…" note under the
+   *  category picker. The picker itself is always the operator's to change. */
+  categoryNote?: string | null;
 }) {
   const cents = (v: number | null | undefined) => (v != null ? (v / 100).toFixed(2) : "");
 
@@ -54,6 +61,9 @@ export default function ExpenseForm({
     <form action={action} className="space-y-4">
       {defaults.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
       {fromReceiptId ? <input type="hidden" name="fromReceiptId" value={fromReceiptId} /> : null}
+      {fromBankTxnId ? (
+        <input type="hidden" name="fromBankTxn" value={fromBankTxnId} />
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -139,6 +149,11 @@ export default function ExpenseForm({
               <option key={c}>{c}</option>
             ))}
           </select>
+          {categoryNote ? (
+            <p className="mt-1 rounded-lg bg-oak-50 px-2.5 py-1.5 text-xs font-medium text-oak-900">
+              {categoryNote}
+            </p>
+          ) : null}
           <p className="mt-1 text-xs text-stone-500">For bookkeeping & tax prep.</p>
         </div>
         <div>

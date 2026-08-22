@@ -10,7 +10,32 @@ const items = [
   { href: "/receipts", label: "Receipts", icon: ReceiptIcon, exact: false },
   null, // center slot — Quick Add
   { href: "/expenses", label: "Money", icon: DollarIcon, exact: false, also: ["/income"] },
-  { href: "/more", label: "More", icon: GridIcon, exact: false, also: ["/assets", "/tax", "/search", "/customers", "/invoices", "/mileage", "/household"] },
+  {
+    href: "/more",
+    label: "More",
+    icon: GridIcon,
+    exact: false,
+    // Every route that lives behind More must be listed here, or that screen
+    // shows no active tab and the operator loses track of where they are.
+    also: [
+      "/assets",
+      "/tax",
+      "/search",
+      "/customers",
+      "/invoices",
+      "/mileage",
+      "/household",
+      "/livestock",
+      "/jobs",
+      "/filament",
+      "/banking",
+      "/bills",
+      "/assistant",
+      "/documents",
+      "/settings",
+      "/tickets",
+    ],
+  },
 ] as const;
 
 export default function BottomNav() {

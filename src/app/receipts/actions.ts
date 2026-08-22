@@ -7,6 +7,7 @@ import { parseDateInput } from "@/lib/dates";
 import { parseDollarsToCents } from "@/lib/money";
 import { saveUpload } from "@/lib/storage";
 import { RECEIPT_STATUSES } from "@/lib/domain";
+import { normalizeAccountingCategory, parseQuantity } from "./receipt-lines";
 
 function str(v: FormDataEntryValue | null): string | null {
   if (typeof v !== "string") return null;
@@ -98,4 +99,130 @@ export async function attachReceiptFile(formData: FormData) {
     });
   }
   redirect(`/receipts/${id}`);
+}
+
+// ———————————————————————————————————————————————————————————————————————
+// FR-006 — itemised receipt lines.
+//
+// A line is worth nothing on its own; it belongs to a receipt, and a receipt
+// belongs to an account. So every one of these actions proves the receipt is
+// THIS account's before it writes, and every write is scoped by accountId as
+// well — a line can never be attached to, edited on, or removed from someone
+// else's receipt even if the id is guessed.
+// ———————————————————————————————————————————————————————————————————————
+
+/** The receipt id, but only if this account owns it. */
+async function ownedReceiptId(accountId: string, receiptId: string): Promise<string | null> {
+  const receipt = await prisma.receipt.findFirst({
+    where: { id: receiptId, accountId },
+    select: { id: true },
+  });
+  return receipt?.id ?? null;
+}
+
+/** A rejected line save goes back to the receipt with a plain reason (the save
+ *  rule: never a silent blank form).
+ *
+ *  `carryTyped` is for the add-a-line form only — its values live nowhere else,
+ *  so they ride back in the URL. An edit is different: nothing was written, so
+ *  that line's box still shows its saved values and handing typed text back
+ *  would drop it into the wrong form. */
+function lineBounce(receiptId: string, formData: FormData, carryTyped: boolean): string {
+  const back = new URLSearchParams({ error: "missing" });
+  if (carryTyped) {
+    for (const [key, field] of [
+      ["ld", "description"],
+      ["lq", "quantity"],
+      ["la", "amount"],
+      ["lc", "accountingCategory"],
+    ]) {
+      const value = str(formData.get(field));
+      if (value) back.set(key, value.slice(0, 200));
+    }
+  }
+  return `/receipts/${receiptId}?${back.toString()}`;
+}
+
+export async function addReceiptLine(formData: FormData) {
+  const accountId = await requireAccountId();
+  const receiptId = str(formData.get("receiptId"));
+  if (!receiptId) redirect("/receipts");
+  if (!(await ownedReceiptId(accountId, receiptId))) redirect("/receipts");
+
+  const description = str(formData.get("description"));
+  const amountCents = parseDollarsToCents(formData.get("amount"));
+  if (!description || amountCents == null) redirect(lineBounce(receiptId, formData, true));
+
+  // New lines land at the bottom, in the order they were typed.
+  const last = await prisma.receiptLine.aggregate({
+    where: { receiptId, accountId },
+    _max: { sortOrder: true },
+  });
+
+  await prisma.receiptLine.create({
+    data: {
+      accountId,
+      receiptId,
+      sortOrder: (last._max.sortOrder ?? -1) + 1,
+      description,
+      quantity: parseQuantity(formData.get("quantity")),
+      amountCents,
+      accountingCategory: normalizeAccountingCategory(str(formData.get("accountingCategory"))),
+    },
+  });
+
+  // Stay on the receipt: itemising is a run of small edits, and the line
+  // appearing in the list above is the confirmation.
+  redirect(`/receipts/${receiptId}`);
+}
+
+export async function updateReceiptLine(formData: FormData) {
+  const accountId = await requireAccountId();
+  const receiptId = str(formData.get("receiptId"));
+  const lineId = str(formData.get("lineId"));
+  if (!receiptId || !lineId) redirect("/receipts");
+  if (!(await ownedReceiptId(accountId, receiptId))) redirect("/receipts");
+
+  const description = str(formData.get("description"));
+  const amountCents = parseDollarsToCents(formData.get("amount"));
+  // Nothing was written, so the box still shows the saved values — the bounce
+  // only has to explain why.
+  if (!description || amountCents == null) redirect(lineBounce(receiptId, formData, false));
+
+  await prisma.receiptLine.updateMany({
+    where: { id: lineId, accountId, receiptId },
+    data: {
+      description,
+      quantity: parseQuantity(formData.get("quantity")),
+      amountCents,
+      accountingCategory: normalizeAccountingCategory(str(formData.get("accountingCategory"))),
+    },
+  });
+
+  redirect(`/receipts/${receiptId}`);
+}
+
+export async function removeReceiptLine(formData: FormData) {
+  const accountId = await requireAccountId();
+  const receiptId = str(formData.get("receiptId"));
+  const lineId = str(formData.get("lineId"));
+  if (!receiptId || !lineId) redirect("/receipts");
+
+  // A line is typed-in detail, not the document: removing one never touches
+  // the receipt or its original file (SPEC §1 — receipts are permanent).
+  await prisma.receiptLine.deleteMany({ where: { id: lineId, accountId, receiptId } });
+  redirect(`/receipts/${receiptId}`);
+}
+
+// SPEC §4 — the operator agreed this receipt is one they already have.
+// Archiving is the ONLY action a duplicate warning offers: the record and its
+// original stay forever, the status changes, and it drops out of the Inbox
+// (and out of future duplicate warnings).
+export async function archiveDuplicateReceipt(formData: FormData) {
+  const accountId = await requireAccountId();
+  const id = str(formData.get("id"));
+  if (!id) redirect("/receipts");
+
+  await prisma.receipt.updateMany({ where: { id, accountId }, data: { status: "ARCHIVED" } });
+  redirect("/receipts?archived=1");
 }

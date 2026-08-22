@@ -29,13 +29,37 @@ async function main() {
     update: {},
   });
 
-  // Wipe (dev only) — order matters for relations.
+  // Wipe (dev only) — order matters for relations. Children first: Expense
+  // points at Animal, so expenses must go before animals.
   await prisma.maintenanceRecord.deleteMany();
+  await prisma.receiptLine.deleteMany();
   await prisma.receipt.deleteMany();
   await prisma.expense.deleteMany();
   await prisma.income.deleteMany();
   await prisma.asset.deleteMany();
   await prisma.vendor.deleteMany();
+  await prisma.animalEvent.deleteMany();
+  await prisma.livestockSale.deleteMany();
+  await prisma.animal.deleteMany();
+  await prisma.filamentUse.deleteMany();
+  await prisma.printJob.deleteMany();
+  await prisma.filamentSpool.deleteMany();
+  await prisma.bankTransaction.deleteMany();
+  await prisma.bankImportProfile.deleteMany();
+  await prisma.document.deleteMany();
+  await prisma.recurringBill.deleteMany();
+  // These were missing, which is why a second `pnpm db:seed` used to die on a
+  // duplicate invoice number or ticket ref. A wipe-and-recreate script has to
+  // actually wipe everything it recreates.
+  await prisma.payment.deleteMany();
+  await prisma.invoiceLine.deleteMany();
+  await prisma.invoice.deleteMany();
+  await prisma.customer.deleteMany();
+  await prisma.mileageLog.deleteMany();
+  await prisma.ticket.deleteMany();
+  await prisma.householdExpense.deleteMany();
+  await prisma.householdBudget.deleteMany();
+  await prisma.recurringHousehold.deleteMany();
 
   const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || "var/uploads");
   await mkdir(uploadDir, { recursive: true });
@@ -537,6 +561,168 @@ async function main() {
     update: {},
   });
 
+  // --- V3: the flock -------------------------------------------------------
+  const ram = await prisma.animal.create({
+    data: {
+      accountId: OWNER,
+      tagNumber: "R-101",
+      name: "Duke",
+      species: "Sheep",
+      breed: "Katahdin",
+      sex: "RAM",
+      birthDate: new Date(2023, 2, 14, 12),
+      birthType: "TWIN",
+      status: "ACTIVE",
+      currentWeightLbs: 210,
+      notes: "Flock sire.",
+    },
+  });
+  const ewe = await prisma.animal.create({
+    data: {
+      accountId: OWNER,
+      tagNumber: "E-204",
+      name: "Clover",
+      species: "Sheep",
+      breed: "Katahdin",
+      sex: "EWE",
+      birthDate: new Date(2022, 1, 3, 12),
+      birthType: "SINGLE",
+      status: "ACTIVE",
+      currentWeightLbs: 148,
+    },
+  });
+  const lamb = await prisma.animal.create({
+    data: {
+      accountId: OWNER,
+      tagNumber: "L-311",
+      species: "Sheep",
+      breed: "Katahdin",
+      sex: "EWE",
+      birthDate: new Date(2026, 2, 2, 12),
+      birthType: "TWIN",
+      sireId: ram.id,
+      damId: ewe.id,
+      status: "ACTIVE",
+      currentWeightLbs: 62,
+    },
+  });
+  await prisma.animalEvent.createMany({
+    data: [
+      {
+        accountId: OWNER,
+        animalId: ewe.id,
+        date: new Date(2025, 9, 6, 12),
+        kind: "BREEDING",
+        mateAnimalId: ram.id,
+        dueDate: new Date(2026, 2, 2, 12),
+        description: "Turned in with Duke.",
+      },
+      {
+        accountId: OWNER,
+        animalId: ewe.id,
+        date: new Date(2026, 2, 2, 12),
+        kind: "LAMBING",
+        lambCount: 2,
+        description: "Twins, both up and nursing.",
+      },
+      {
+        accountId: OWNER,
+        animalId: lamb.id,
+        date: new Date(2026, 5, 18, 12),
+        kind: "DEWORMING",
+        productName: "Ivermectin drench",
+        dosage: "3 mL",
+        withdrawalUntil: new Date(2026, 6, 2, 12),
+        costCents: 340,
+      },
+      {
+        accountId: OWNER,
+        animalId: lamb.id,
+        date: new Date(2026, 7, 1, 12),
+        kind: "WEIGHT",
+        weightLbs: 62,
+      },
+    ],
+  });
+
+  // --- V4: filament + a print job -----------------------------------------
+  const spool = await prisma.filamentSpool.create({
+    data: {
+      accountId: OWNER,
+      manufacturer: "Bambu Lab",
+      material: "PLA",
+      colorName: "Matte Black",
+      spoolTag: "PLA-01",
+      purchaseDate: new Date(2026, 6, 9, 12),
+      purchasePriceCents: 2499,
+      totalGrams: 1000,
+      remainingGrams: 740,
+      wasteGrams: 15,
+      status: "IN_USE",
+      printerAssetId: printer.id,
+    },
+  });
+  await prisma.filamentSpool.create({
+    data: {
+      accountId: OWNER,
+      manufacturer: "iSANGHU",
+      material: "TPU",
+      colorName: "Black 85A",
+      spoolTag: "TPU-01",
+      purchaseDate: new Date(2026, 6, 27, 12),
+      purchasePriceCents: 2267,
+      totalGrams: 1000,
+      remainingGrams: 68,
+      status: "IN_STOCK",
+    },
+  });
+  const job = await prisma.printJob.create({
+    data: {
+      accountId: OWNER,
+      jobNumber: "JOB-001",
+      partName: "Gate latch bracket",
+      partNumber: "TO-GLB-01",
+      description: "Reinforced latch bracket, 6 off.",
+      printerAssetId: printer.id,
+      quantity: 6,
+      failedCount: 1,
+      printMinutes: 430,
+      laborMinutes: 35,
+      packagingCostCents: 240,
+      shippingCostCents: 890,
+      salePriceCents: 9000,
+      status: "SHIPPED",
+      completedAt: new Date(2026, 7, 6, 12),
+    },
+  });
+  await prisma.filamentUse.create({
+    data: { accountId: OWNER, printJobId: job.id, spoolId: spool.id, grams: 245, wasteGrams: 15 },
+  });
+
+  // --- Regular bills (what the dashboard shows as upcoming) ----------------
+  await prisma.recurringBill.createMany({
+    data: [
+      {
+        accountId: OWNER,
+        description: "Farm liability insurance",
+        amountCents: 14200,
+        division: "FARM",
+        accountingCategory: "Insurance",
+        vendorName: "Alfa Insurance",
+        dayOfMonth: 5,
+      },
+      {
+        accountId: OWNER,
+        description: "Shop electricity",
+        amountCents: 21800,
+        division: "SHARED",
+        accountingCategory: "Utilities",
+        vendorName: "Alabama Power",
+        dayOfMonth: 18,
+      },
+    ],
+  });
+
   // --- Tracker (FR-004) ---------------------------------------------------
   // Single source of truth for the backlog, shared with the live app so the
   // two can't drift: src/lib/backlog.ts.
@@ -557,7 +743,7 @@ async function main() {
   }
 
   console.log(
-    `Seeded: 6 vendors, 3 assets, 7 expenses, 3 income, 3 receipts, 3 maintenance records, 2 customers, 2 invoices (1 paid), 2 mileage trips, business profile, ${BACKLOG.length} tracker items.`,
+    `Seeded: 6 vendors, 3 assets, 7 expenses, 3 income, 3 receipts, 3 maintenance records, 2 customers, 2 invoices (1 paid), 2 mileage trips, 3 sheep + 4 flock events, 2 filament spools, 1 print job, 2 regular bills, business profile, ${BACKLOG.length} tracker items.`,
   );
 }
 

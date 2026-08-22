@@ -23,6 +23,7 @@ import {
 } from "../invoice-bits";
 import { formatRate } from "@/lib/tax";
 import { convertQuote, deleteInvoice, deletePayment, recordPayment, setInvoiceStatus } from "../actions";
+import DocumentsCard from "@/components/DocumentsCard";
 
 export const dynamic = "force-dynamic";
 
@@ -373,6 +374,8 @@ export default async function InvoiceDetailPage({
           </form>
         </div>
       ) : null}
+
+      <DocumentsCard ownerType="INVOICE" ownerId={invoice.id} title="Attached paperwork" />
     </div>
   );
 }

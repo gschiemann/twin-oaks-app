@@ -105,6 +105,32 @@ const MILEAGE_FIELDS: SearchableFields = {
   date: "date",
 };
 
+// Searching "1042" must find the ewe with that ear tag — that number is how
+// the owner refers to the animal out in the field.
+const ANIMAL_FIELDS: SearchableFields = {
+  text: ["tagNumber", "name", "breed", "species", "notes"],
+  money: ["acquisitionCostCents"],
+  date: "birthDate",
+};
+
+const PRINT_JOB_FIELDS: SearchableFields = {
+  text: ["jobNumber", "partName", "partNumber", "description", "notes"],
+  money: ["salePriceCents"],
+  date: "completedAt",
+};
+
+const SPOOL_FIELDS: SearchableFields = {
+  text: ["manufacturer", "material", "colorName", "spoolTag", "notes"],
+  money: ["purchasePriceCents"],
+  date: "purchaseDate",
+};
+
+const DOCUMENT_FIELDS: SearchableFields = {
+  text: ["title", "fileName", "kind", "notes"],
+  money: [],
+  date: "createdAt",
+};
+
 // "text “hydraulic” · amount $87.42 · date Aug 9, 2026" — only the parts present.
 function describeTerms(terms: SearchTerm[]): string {
   const texts = terms.flatMap((t) => (t.kind === "text" ? [`“${t.raw}”`] : []));
@@ -133,9 +159,23 @@ export default async function SearchPage({
     .slice(0, 6)
     .map((word) => classifyTerm(word, now));
 
-  const [expenses, receipts, assets, incomes, maintenance, customers, invoices, trips, household] =
+  const [
+    expenses,
+    receipts,
+    assets,
+    incomes,
+    maintenance,
+    customers,
+    invoices,
+    trips,
+    household,
+    animals,
+    printJobs,
+    spools,
+    documents,
+  ] =
     terms.length === 0
-      ? [[], [], [], [], [], [], [], [], []]
+      ? [[], [], [], [], [], [], [], [], [], [], [], [], []]
       : await Promise.all([
           prisma.expense.findMany({
             where: { AND: [{ accountId }, whereFor(terms, EXPENSE_FIELDS)] },
@@ -183,6 +223,26 @@ export default async function SearchPage({
             take: 25,
             orderBy: { date: "desc" },
           }),
+          prisma.animal.findMany({
+            where: { AND: [{ accountId }, whereFor(terms, ANIMAL_FIELDS)] },
+            take: 25,
+            orderBy: { tagNumber: "asc" },
+          }),
+          prisma.printJob.findMany({
+            where: { AND: [{ accountId }, whereFor(terms, PRINT_JOB_FIELDS)] },
+            take: 25,
+            orderBy: { createdAt: "desc" },
+          }),
+          prisma.filamentSpool.findMany({
+            where: { AND: [{ accountId }, whereFor(terms, SPOOL_FIELDS)] },
+            take: 25,
+            orderBy: { createdAt: "desc" },
+          }),
+          prisma.document.findMany({
+            where: { AND: [{ accountId }, whereFor(terms, DOCUMENT_FIELDS)] },
+            take: 25,
+            orderBy: { createdAt: "desc" },
+          }),
         ]);
 
   const total =
@@ -194,7 +254,11 @@ export default async function SearchPage({
     customers.length +
     invoices.length +
     trips.length +
-    household.length;
+    household.length +
+    animals.length +
+    printJobs.length +
+    spools.length +
+    documents.length;
 
   return (
     <div>
@@ -217,7 +281,8 @@ export default async function SearchPage({
 
       {terms.length === 0 ? (
         <p className="text-center text-sm text-stone-500">
-          Type to search across expenses, receipts, income, equipment, and maintenance history.
+          Type to search across expenses, receipts, income, equipment, maintenance history, your
+          flock, print jobs, filament, and stored documents.
         </p>
       ) : total === 0 ? (
         <p className="text-center text-sm text-stone-500">No matches for “{q}”.</p>
@@ -420,6 +485,101 @@ export default async function SearchPage({
                     </span>
                     <span className="font-semibold tabular-nums">
                       {t.miles.toLocaleString("en-US", { maximumFractionDigits: 1 })} mi
+                    </span>
+                  </Link>
+                ))}
+              </Card>
+            </section>
+          ) : null}
+
+          {animals.length > 0 ? (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-500">
+                Flock
+              </h2>
+              <Card className="divide-y divide-stone-100 p-0">
+                {animals.map((a) => (
+                  <Link key={a.id} href={`/livestock/${a.id}`} className="block px-4 py-3">
+                    <span className="block font-medium">
+                      #{a.tagNumber}
+                      {a.name ? ` · ${a.name}` : ""}
+                    </span>
+                    <span className="text-sm text-stone-500">
+                      {[a.breed, a.sex, a.status].filter(Boolean).join(" · ")}
+                    </span>
+                  </Link>
+                ))}
+              </Card>
+            </section>
+          ) : null}
+
+          {printJobs.length > 0 ? (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-500">
+                Print jobs
+              </h2>
+              <Card className="divide-y divide-stone-100 p-0">
+                {printJobs.map((j) => (
+                  <Link
+                    key={j.id}
+                    href={`/jobs/${j.id}`}
+                    className="flex justify-between gap-3 px-4 py-3"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">
+                        {j.jobNumber} · {j.partName}
+                      </span>
+                      <span className="text-sm text-stone-500">
+                        {j.status} · {j.quantity} made
+                      </span>
+                    </span>
+                    <span className="font-semibold tabular-nums">
+                      {formatCents(j.salePriceCents)}
+                    </span>
+                  </Link>
+                ))}
+              </Card>
+            </section>
+          ) : null}
+
+          {spools.length > 0 ? (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-500">
+                Filament
+              </h2>
+              <Card className="divide-y divide-stone-100 p-0">
+                {spools.map((s) => (
+                  <Link
+                    key={s.id}
+                    href={`/filament/${s.id}`}
+                    className="flex justify-between gap-3 px-4 py-3"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">
+                        {[s.manufacturer, s.material, s.colorName].filter(Boolean).join(" ")}
+                      </span>
+                      <span className="text-sm text-stone-500">{s.status}</span>
+                    </span>
+                    <span className="font-semibold tabular-nums">
+                      {Math.round(s.remainingGrams)} g left
+                    </span>
+                  </Link>
+                ))}
+              </Card>
+            </section>
+          ) : null}
+
+          {documents.length > 0 ? (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-500">
+                Documents
+              </h2>
+              <Card className="divide-y divide-stone-100 p-0">
+                {documents.map((d) => (
+                  <Link key={d.id} href="/documents" className="block px-4 py-3">
+                    <span className="block truncate font-medium">{d.title}</span>
+                    <span className="text-sm text-stone-500">
+                      {d.kind} · {d.fileName}
                     </span>
                   </Link>
                 ))}

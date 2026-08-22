@@ -4,8 +4,10 @@ import { requireAccountId } from "@/lib/auth";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import { RECEIPT_STATUS_LABELS, type ReceiptStatus } from "@/lib/domain";
+import { duplicateHeadline, findLikelyDuplicatesForMany } from "@/lib/receipt-dupes";
 import { Card, Chip, EmptyState, PageHeader, SavedBanner, btnPrimaryCls } from "@/components/ui";
 import { ReceiptThumb, receiptStatusTone } from "./receipt-bits";
+import DuplicateWarning from "./DuplicateWarning";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +20,16 @@ const TABS = [
 export default async function ReceiptsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; saved?: string; categorized?: string; updated?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    saved?: string;
+    categorized?: string;
+    updated?: string;
+    archived?: string;
+  }>;
 }) {
   const accountId = await requireAccountId();
-  const { tab = "inbox", saved, categorized, updated } = await searchParams;
+  const { tab = "inbox", saved, categorized, updated, archived } = await searchParams;
 
   const where = {
     accountId,
@@ -40,6 +48,15 @@ export default async function ReceiptsPage({
     }),
     prisma.receipt.count({ where: { accountId, status: "INBOX" } }),
   ]);
+
+  // SPEC §4 — the Inbox flags possible duplicates. One extra query for the
+  // whole page (not one per row), and it can never throw: a warning that
+  // can't be worked out just isn't shown. An archived receipt was already
+  // dealt with, so it is never warned about again.
+  const duplicates = await findLikelyDuplicatesForMany(
+    accountId,
+    receipts.filter((r) => r.status !== "ARCHIVED"),
+  );
 
   return (
     <div>
@@ -76,6 +93,13 @@ export default async function ReceiptsPage({
         />
       ) : null}
 
+      {archived ? (
+        <SavedBanner
+          title="Receipt archived."
+          hint="Nothing was deleted — the receipt and its original photo are kept forever. Switch to the All tab any time you want to see it."
+        />
+      ) : null}
+
       <div className="mb-4 flex gap-2">
         {TABS.map((t) => (
           <Link
@@ -102,32 +126,55 @@ export default async function ReceiptsPage({
         />
       ) : (
         <div className="space-y-2">
-          {receipts.map((r) => (
-            <Link key={r.id} href={`/receipts/${r.id}`} className="block">
-              <Card className="flex items-center gap-3 active:bg-stone-50">
-                <ReceiptThumb filePath={r.filePath} mimeType={r.mimeType} source={r.source} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold text-stone-900">
-                    {r.vendorName ?? "Unknown vendor"}
+          {receipts.map((r) => {
+            const dupe = duplicates.get(r.id)?.[0];
+            return (
+              <div key={r.id}>
+                <Link href={`/receipts/${r.id}`} className="block">
+                  <Card className="flex items-center gap-3 active:bg-stone-50">
+                    <ReceiptThumb filePath={r.filePath} mimeType={r.mimeType} source={r.source} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold text-stone-900">
+                        {r.vendorName ?? "Unknown vendor"}
+                      </div>
+                      <div className="truncate text-sm text-stone-500">
+                        {r.source === "EMAIL" && r.emailSubject
+                          ? r.emailSubject
+                          : `${formatDate(r.receiptDate)} · added ${formatDate(r.createdAt)}`}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <Chip tone={receiptStatusTone(r.status)}>
+                          {RECEIPT_STATUS_LABELS[r.status as ReceiptStatus] ?? r.status}
+                        </Chip>
+                        {r.source === "EMAIL" ? <Chip tone="blue">✉️ Emailed in</Chip> : null}
+                        {dupe ? <Chip tone="amber">Possible duplicate</Chip> : null}
+                      </div>
+                    </div>
+                    <div className="text-right font-bold tabular-nums text-stone-900">
+                      {formatCents(r.totalCents)}
+                    </div>
+                  </Card>
+                </Link>
+
+                {/* Outside the row's link on purpose: this card has its own
+                    link and buttons, and a link inside a link is broken on a
+                    phone. It warns; it never blocks anything. */}
+                {dupe ? (
+                  <div className="mt-2">
+                    <DuplicateWarning
+                      receiptId={r.id}
+                      headline={duplicateHeadline(dupe)}
+                      why={dupe.why}
+                      otherReceiptId={dupe.id}
+                      otherLabel={[formatDate(dupe.receiptDate), formatCents(dupe.totalCents)]
+                        .filter((s) => s !== "—")
+                        .join(" · ")}
+                    />
                   </div>
-                  <div className="truncate text-sm text-stone-500">
-                    {r.source === "EMAIL" && r.emailSubject
-                      ? r.emailSubject
-                      : `${formatDate(r.receiptDate)} · added ${formatDate(r.createdAt)}`}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    <Chip tone={receiptStatusTone(r.status)}>
-                      {RECEIPT_STATUS_LABELS[r.status as ReceiptStatus] ?? r.status}
-                    </Chip>
-                    {r.source === "EMAIL" ? <Chip tone="blue">✉️ Emailed in</Chip> : null}
-                  </div>
-                </div>
-                <div className="text-right font-bold tabular-nums text-stone-900">
-                  {formatCents(r.totalCents)}
-                </div>
-              </Card>
-            </Link>
-          ))}
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

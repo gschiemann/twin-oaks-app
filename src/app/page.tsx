@@ -7,6 +7,7 @@ import { formatDate, startOfMonth, startOfYear } from "@/lib/dates";
 import { Card, Chip, EmptyState, PageHeader, StatCard, divisionTone } from "@/components/ui";
 import { DIVISION_LABELS, type Division } from "@/lib/domain";
 import { ensureSchema } from "@/lib/ensure-schema";
+import { billLikelyPaid, dueInWords, formatApproxDollars, upcomingBills } from "@/lib/bills";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,8 @@ export default async function DashboardPage() {
     openInvoices,
     householdMonth,
     householdBudgets,
+    billsDue,
+    monthExpenses,
   ] = await Promise.all([
     sums(accountId, "expense", monthStart),
     sums(accountId, "income", monthStart),
@@ -96,6 +99,13 @@ export default async function DashboardPage() {
       _count: true,
     }),
     prisma.householdBudget.aggregate({ where: { accountId }, _sum: { monthlyCents: true }, _count: true }),
+    // SPEC §2 "Upcoming bills". Declared at /bills and only ever SHOWN here —
+    // a business bill is never auto-posted to the books.
+    upcomingBills(accountId, 30),
+    prisma.expense.findMany({
+      where: { accountId, date: { gte: monthStart } },
+      select: { id: true, amountCents: true, date: true, description: true, vendorName: true },
+    }),
   ]);
 
   const outstandingCents = openInvoices.reduce(
@@ -105,6 +115,14 @@ export default async function DashboardPage() {
   const awaitingCount = openInvoices.filter(
     (i) => i.totalCents - i.payments.reduce((p, x) => p + x.amountCents, 0) > 0,
   ).length;
+
+  // "Looks paid" is only ever a hint beside a bill — the bill stays listed and
+  // stays in the total, because a wrong guess must never hide a real bill.
+  const billsWithGuess = billsDue.map((bill) => ({
+    bill,
+    guess: billLikelyPaid(bill, monthExpenses, monthStart),
+  }));
+  const billsDueCents = billsDue.reduce((sum, b) => sum + b.amountCents, 0);
 
   const netMonth = incMonth - expMonth;
   const netYtd = incYtd - expYtd;
@@ -216,6 +234,41 @@ export default async function DashboardPage() {
             </span>
           </Card>
         </Link>
+      ) : null}
+
+      {billsDue.length > 0 ? (
+        <Card className="mb-4">
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <h2 className="font-semibold text-stone-900">🗓️ Coming up</h2>
+            <Link href="/bills" className="text-sm font-medium text-oak-700">
+              All bills
+            </Link>
+          </div>
+          <p className="mb-3 text-sm text-stone-600">
+            About {formatApproxDollars(billsDueCents)} of regular bills are due in the next 30 days.
+          </p>
+          <ul className="divide-y divide-stone-100">
+            {billsWithGuess.slice(0, 5).map(({ bill, guess }) => (
+              <li key={bill.id} className="flex items-center justify-between gap-3 py-2">
+                <span className="min-w-0">
+                  <span className="block truncate font-medium text-stone-800">
+                    {bill.description}
+                  </span>
+                  <span className="text-xs text-stone-500">
+                    {dueInWords(bill.dayOfMonth, bill.daysAway)}
+                    {guess.likelyPaid ? " · looks paid this month" : ""}
+                  </span>
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums text-stone-900">
+                  {formatCents(bill.amountCents)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-stone-400">
+            Shown here only — nothing is added to your books until you record it.
+          </p>
+        </Card>
       ) : null}
 
       {isOwner ? (

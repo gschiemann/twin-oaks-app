@@ -436,6 +436,265 @@ const DDL: string[] = [
     CONSTRAINT "RecurringHousehold_pkey" PRIMARY KEY ("id")
 )`,
   `CREATE INDEX IF NOT EXISTS "RecurringHousehold_accountId_idx" ON "RecurringHousehold"("accountId")`,
+
+  // ————— V5.0: V3 livestock, V4 manufacturing, banking, documents —————
+
+  `CREATE TABLE IF NOT EXISTS "Animal" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "tagNumber" TEXT NOT NULL,
+    "name" TEXT,
+    "species" TEXT NOT NULL DEFAULT 'Sheep',
+    "breed" TEXT,
+    "sex" TEXT NOT NULL,
+    "birthDate" TIMESTAMP(3),
+    "birthType" TEXT,
+    "sireId" TEXT,
+    "damId" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+    "acquisitionDate" TIMESTAMP(3),
+    "acquisitionCostCents" INTEGER,
+    "currentWeightLbs" DOUBLE PRECISION,
+    "photoPath" TEXT,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "Animal_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Animal_accountId_tagNumber_key" ON "Animal"("accountId", "tagNumber")`,
+  `CREATE INDEX IF NOT EXISTS "Animal_accountId_idx" ON "Animal"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "Animal_accountId_status_idx" ON "Animal"("accountId", "status")`,
+
+  `CREATE TABLE IF NOT EXISTS "AnimalEvent" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "animalId" TEXT NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL,
+    "kind" TEXT NOT NULL,
+    "description" TEXT,
+    "weightLbs" DOUBLE PRECISION,
+    "productName" TEXT,
+    "dosage" TEXT,
+    "withdrawalUntil" TIMESTAMP(3),
+    "mateAnimalId" TEXT,
+    "dueDate" TIMESTAMP(3),
+    "result" TEXT,
+    "lambCount" INTEGER,
+    "costCents" INTEGER,
+    "expenseId" TEXT,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "AnimalEvent_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "AnimalEvent_accountId_date_idx" ON "AnimalEvent"("accountId", "date")`,
+  `CREATE INDEX IF NOT EXISTS "AnimalEvent_animalId_date_idx" ON "AnimalEvent"("animalId", "date")`,
+  `CREATE INDEX IF NOT EXISTS "AnimalEvent_accountId_kind_idx" ON "AnimalEvent"("accountId", "kind")`,
+
+  `CREATE TABLE IF NOT EXISTS "LivestockSale" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "animalId" TEXT,
+    "customerId" TEXT,
+    "buyerName" TEXT,
+    "date" TIMESTAMP(3) NOT NULL,
+    "salePriceCents" INTEGER NOT NULL,
+    "weightLbs" DOUBLE PRECISION,
+    "paymentMethod" TEXT,
+    "incomeId" TEXT,
+    "processingNotes" TEXT,
+    "notes" TEXT,
+    "taxYear" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "LivestockSale_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "LivestockSale_accountId_date_idx" ON "LivestockSale"("accountId", "date")`,
+  `CREATE INDEX IF NOT EXISTS "LivestockSale_animalId_idx" ON "LivestockSale"("animalId")`,
+  `CREATE INDEX IF NOT EXISTS "LivestockSale_accountId_taxYear_idx" ON "LivestockSale"("accountId", "taxYear")`,
+
+  `ALTER TABLE "Expense" ADD COLUMN IF NOT EXISTS "animalId" TEXT`,
+  `CREATE INDEX IF NOT EXISTS "Expense_animalId_idx" ON "Expense"("animalId")`,
+
+  `CREATE TABLE IF NOT EXISTS "FilamentSpool" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "manufacturer" TEXT,
+    "material" TEXT NOT NULL,
+    "colorName" TEXT,
+    "spoolTag" TEXT,
+    "purchaseDate" TIMESTAMP(3),
+    "purchasePriceCents" INTEGER,
+    "totalGrams" DOUBLE PRECISION NOT NULL DEFAULT 1000,
+    "remainingGrams" DOUBLE PRECISION NOT NULL DEFAULT 1000,
+    "wasteGrams" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "status" TEXT NOT NULL DEFAULT 'IN_STOCK',
+    "printerAssetId" TEXT,
+    "receiptId" TEXT,
+    "expenseId" TEXT,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "FilamentSpool_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "FilamentSpool_accountId_idx" ON "FilamentSpool"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "FilamentSpool_accountId_status_idx" ON "FilamentSpool"("accountId", "status")`,
+
+  `CREATE TABLE IF NOT EXISTS "PrintJob" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "jobNumber" TEXT NOT NULL,
+    "partName" TEXT NOT NULL,
+    "partNumber" TEXT,
+    "description" TEXT,
+    "customerId" TEXT,
+    "printerAssetId" TEXT,
+    "quantity" INTEGER NOT NULL DEFAULT 1,
+    "failedCount" INTEGER NOT NULL DEFAULT 0,
+    "printMinutes" INTEGER,
+    "laborMinutes" INTEGER,
+    "machineRateCentsPerHour" INTEGER,
+    "laborRateCentsPerHour" INTEGER,
+    "packagingCostCents" INTEGER,
+    "shippingCostCents" INTEGER,
+    "otherCostCents" INTEGER,
+    "salePriceCents" INTEGER,
+    "invoiceId" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'QUEUED',
+    "startedAt" TIMESTAMP(3),
+    "completedAt" TIMESTAMP(3),
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "PrintJob_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "PrintJob_accountId_jobNumber_key" ON "PrintJob"("accountId", "jobNumber")`,
+  `CREATE INDEX IF NOT EXISTS "PrintJob_accountId_idx" ON "PrintJob"("accountId")`,
+  `CREATE INDEX IF NOT EXISTS "PrintJob_accountId_status_idx" ON "PrintJob"("accountId", "status")`,
+  `CREATE INDEX IF NOT EXISTS "PrintJob_customerId_idx" ON "PrintJob"("customerId")`,
+  `CREATE INDEX IF NOT EXISTS "PrintJob_printerAssetId_idx" ON "PrintJob"("printerAssetId")`,
+
+  `CREATE TABLE IF NOT EXISTS "FilamentUse" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "printJobId" TEXT NOT NULL,
+    "spoolId" TEXT NOT NULL,
+    "grams" DOUBLE PRECISION NOT NULL,
+    "wasteGrams" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "FilamentUse_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "FilamentUse_printJobId_idx" ON "FilamentUse"("printJobId")`,
+  `CREATE INDEX IF NOT EXISTS "FilamentUse_spoolId_idx" ON "FilamentUse"("spoolId")`,
+  `CREATE INDEX IF NOT EXISTS "FilamentUse_accountId_idx" ON "FilamentUse"("accountId")`,
+
+  `CREATE TABLE IF NOT EXISTS "BankTransaction" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "bankName" TEXT,
+    "importBatchId" TEXT,
+    "date" TIMESTAMP(3) NOT NULL,
+    "description" TEXT NOT NULL,
+    "amountCents" INTEGER NOT NULL,
+    "balanceCents" INTEGER,
+    "fingerprint" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'UNMATCHED',
+    "matchedExpenseId" TEXT,
+    "matchedIncomeId" TEXT,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "BankTransaction_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "BankTransaction_accountId_fingerprint_key" ON "BankTransaction"("accountId", "fingerprint")`,
+  `CREATE INDEX IF NOT EXISTS "BankTransaction_accountId_status_idx" ON "BankTransaction"("accountId", "status")`,
+  `CREATE INDEX IF NOT EXISTS "BankTransaction_accountId_date_idx" ON "BankTransaction"("accountId", "date")`,
+
+  `CREATE TABLE IF NOT EXISTS "BankImportProfile" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "bankName" TEXT NOT NULL,
+    "mappingJson" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "BankImportProfile_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "BankImportProfile_accountId_bankName_key" ON "BankImportProfile"("accountId", "bankName")`,
+  `CREATE INDEX IF NOT EXISTS "BankImportProfile_accountId_idx" ON "BankImportProfile"("accountId")`,
+
+  `CREATE TABLE IF NOT EXISTS "Document" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "ownerType" TEXT NOT NULL,
+    "ownerId" TEXT NOT NULL,
+    "kind" TEXT NOT NULL DEFAULT 'DOCUMENT',
+    "title" TEXT NOT NULL,
+    "filePath" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "mimeType" TEXT NOT NULL,
+    "fileSize" INTEGER NOT NULL,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "Document_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "Document_accountId_ownerType_ownerId_idx" ON "Document"("accountId", "ownerType", "ownerId")`,
+  `CREATE INDEX IF NOT EXISTS "Document_accountId_idx" ON "Document"("accountId")`,
+
+  `CREATE TABLE IF NOT EXISTS "ReceiptLine" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "receiptId" TEXT NOT NULL,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "description" TEXT NOT NULL,
+    "quantity" DOUBLE PRECISION NOT NULL DEFAULT 1,
+    "amountCents" INTEGER NOT NULL,
+    "accountingCategory" TEXT,
+    CONSTRAINT "ReceiptLine_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "ReceiptLine_receiptId_idx" ON "ReceiptLine"("receiptId")`,
+  `CREATE INDEX IF NOT EXISTS "ReceiptLine_accountId_idx" ON "ReceiptLine"("accountId")`,
+
+  // Foreign keys for the V5 tables (no IF NOT EXISTS — swallow duplicates).
+  `DO $$ BEGIN
+    ALTER TABLE "Animal" ADD CONSTRAINT "Animal_sireId_fkey" FOREIGN KEY ("sireId") REFERENCES "Animal"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "Animal" ADD CONSTRAINT "Animal_damId_fkey" FOREIGN KEY ("damId") REFERENCES "Animal"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "AnimalEvent" ADD CONSTRAINT "AnimalEvent_animalId_fkey" FOREIGN KEY ("animalId") REFERENCES "Animal"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "Expense" ADD CONSTRAINT "Expense_animalId_fkey" FOREIGN KEY ("animalId") REFERENCES "Animal"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "FilamentUse" ADD CONSTRAINT "FilamentUse_printJobId_fkey" FOREIGN KEY ("printJobId") REFERENCES "PrintJob"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "FilamentUse" ADD CONSTRAINT "FilamentUse_spoolId_fkey" FOREIGN KEY ("spoolId") REFERENCES "FilamentSpool"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "ReceiptLine" ADD CONSTRAINT "ReceiptLine_receiptId_fkey" FOREIGN KEY ("receiptId") REFERENCES "Receipt"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+
+  // LAST on purpose — the probe targets this table, so its presence proves
+  // every earlier V5 statement ran.
+  `CREATE TABLE IF NOT EXISTS "RecurringBill" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "amountCents" INTEGER NOT NULL,
+    "division" TEXT NOT NULL,
+    "accountingCategory" TEXT NOT NULL,
+    "vendorName" TEXT,
+    "dayOfMonth" INTEGER NOT NULL DEFAULT 1,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "RecurringBill_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "RecurringBill_accountId_idx" ON "RecurringBill"("accountId")`,
 ];
 
 export type DbStatus =
@@ -464,7 +723,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
     // Probe the NEWEST schema element (table OR column) — if an older
     // deploy's schema is present but anything newer is missing, the
     // idempotent DDL below fills the gap.
-    await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "RecurringHousehold" LIMIT 1`);
+    await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "RecurringBill" LIMIT 1`);
     return { ok: true }; // schema already present
   } catch (probeErr) {
     // Something missing (or connection issue) — attempt to apply the schema.
@@ -472,7 +731,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
       for (const stmt of DDL) {
         await prisma.$executeRawUnsafe(stmt);
       }
-      await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "RecurringHousehold" LIMIT 1`);
+      await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "RecurringBill" LIMIT 1`);
       console.log("[twin-oaks] database schema applied by self-heal");
       return { ok: true };
     } catch (healErr) {

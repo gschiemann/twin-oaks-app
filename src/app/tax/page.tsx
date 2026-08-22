@@ -4,7 +4,7 @@ import { requireAccountId } from "@/lib/auth";
 import { formatCents } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { DIVISION_LABELS, type Division } from "@/lib/domain";
-import { Card, Chip, PageHeader, StatCard, divisionTone } from "@/components/ui";
+import { Card, Chip, PageHeader, StatCard, btnPrimaryCls, divisionTone } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -287,11 +287,20 @@ export default async function TaxCenterPage({
             </a>
           ))}
         </div>
+
+        {/* SPEC §28 — the one download an accountant actually wants. */}
+        <a href={`/api/export/package?year=${taxYear}`} className={`${btnPrimaryCls} mt-3 w-full`}>
+          ⬇ Everything for {taxYear} (one file)
+        </a>
+        <p className="mt-1.5 text-xs text-stone-500">
+          A single zip holding all six sheets above plus every receipt image for {taxYear}, named
+          so your accountant can find them, with an index listing which receipt belongs to which
+          expense. On a phone it can take a minute.
+        </p>
       </Card>
 
       <p className="text-center text-xs text-stone-400">
-        Full JSON backup lives under More → Download backup. A ZIP bundle including receipt
-        images is planned.
+        Full JSON backup lives under More → Download backup.
       </p>
     </div>
   );

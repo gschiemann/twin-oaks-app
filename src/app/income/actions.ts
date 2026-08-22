@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { attachIncomeToBankTransaction } from "@/app/banking/link-expense";
 import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
 import { parseDateInput, taxYearOf } from "@/lib/dates";
@@ -39,9 +40,21 @@ function incomeDataFromForm(formData: FormData) {
 
 export async function createIncome(formData: FormData) {
   const accountId = await requireAccountId();
+  // Read BEFORE the validation bounce so a typo can't orphan the bank line
+  // this income was being created from.
+  const fromBankTxn = str(formData.get("fromBankTxn"));
   const data = incomeDataFromForm(formData);
-  if (!data) redirect("/income/new?error=missing");
-  await prisma.income.create({ data: { ...data, accountId } });
+  if (!data) {
+    redirect(
+      `/income/new?error=missing${fromBankTxn ? `&fromBankTxn=${encodeURIComponent(fromBankTxn)}` : ""}`,
+    );
+  }
+  const income = await prisma.income.create({ data: { ...data, accountId } });
+  if (fromBankTxn) {
+    // Never throws — a failed link must not undo a save that already worked.
+    await attachIncomeToBankTransaction(accountId, fromBankTxn, income.id);
+    redirect("/banking?matched=1");
+  }
   redirect("/income?saved=1");
 }
 

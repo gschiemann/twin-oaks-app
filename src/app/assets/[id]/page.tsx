@@ -17,6 +17,7 @@ import {
   labelCls,
 } from "@/components/ui";
 import { addMaintenance, deleteMaintenance } from "../actions";
+import DocumentsCard from "@/components/DocumentsCard";
 
 export const dynamic = "force-dynamic";
 
@@ -253,6 +254,8 @@ export default async function AssetDetailPage({
           </div>
         )}
       </Card>
+
+      <DocumentsCard ownerType="ASSET" ownerId={asset.id} title="Photos, manuals & warranty" />
     </div>
   );
 }

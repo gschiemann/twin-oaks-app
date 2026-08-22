@@ -11,9 +11,13 @@ export const BACKUP_KEEP = 30; // ~a month of dailies
 // omit it for the operational whole-database dump the nightly cron writes.
 export async function buildBackup(accountId?: string) {
   const where = accountId ? { accountId } : undefined;
+  // EVERY table with an accountId belongs here. A model added to the schema
+  // but forgotten here is silent data loss at restore time — when you add a
+  // model, add it to this list in the same commit.
   const [
     vendors,
     receipts,
+    receiptLines,
     expenses,
     incomes,
     assets,
@@ -25,9 +29,21 @@ export async function buildBackup(accountId?: string) {
     mileage,
     householdExpenses,
     householdBudgets,
+    recurringHousehold,
+    animals,
+    animalEvents,
+    livestockSales,
+    filamentSpools,
+    printJobs,
+    filamentUses,
+    bankTransactions,
+    bankImportProfiles,
+    documents,
+    recurringBills,
   ] = await Promise.all([
     prisma.vendor.findMany({ where }),
     prisma.receipt.findMany({ where }),
+    prisma.receiptLine.findMany({ where }),
     prisma.expense.findMany({ where }),
     prisma.income.findMany({ where }),
     prisma.asset.findMany({ where }),
@@ -39,45 +55,60 @@ export async function buildBackup(accountId?: string) {
     prisma.mileageLog.findMany({ where }),
     prisma.householdExpense.findMany({ where }),
     prisma.householdBudget.findMany({ where }),
+    prisma.recurringHousehold.findMany({ where }),
+    prisma.animal.findMany({ where }),
+    prisma.animalEvent.findMany({ where }),
+    prisma.livestockSale.findMany({ where }),
+    prisma.filamentSpool.findMany({ where }),
+    prisma.printJob.findMany({ where }),
+    prisma.filamentUse.findMany({ where }),
+    prisma.bankTransaction.findMany({ where }),
+    prisma.bankImportProfile.findMany({ where }),
+    prisma.document.findMany({ where }),
+    prisma.recurringBill.findMany({ where }),
   ]);
+
+  const data = {
+    vendors,
+    receipts,
+    receiptLines,
+    expenses,
+    incomes,
+    assets,
+    maintenance,
+    customers,
+    invoices,
+    invoiceLines,
+    payments,
+    mileage,
+    householdExpenses,
+    householdBudgets,
+    recurringHousehold,
+    animals,
+    animalEvents,
+    livestockSales,
+    filamentSpools,
+    printJobs,
+    filamentUses,
+    bankTransactions,
+    bankImportProfiles,
+    documents,
+    recurringBills,
+  };
 
   return {
     app: "twin-oaks-os",
-    schemaVersion: 4,
+    schemaVersion: 5,
     exportedAt: new Date().toISOString(),
-    counts: {
-      vendors: vendors.length,
-      receipts: receipts.length,
-      expenses: expenses.length,
-      incomes: incomes.length,
-      assets: assets.length,
-      maintenance: maintenance.length,
-      customers: customers.length,
-      invoices: invoices.length,
-      invoiceLines: invoiceLines.length,
-      payments: payments.length,
-      mileage: mileage.length,
-      householdExpenses: householdExpenses.length,
-      householdBudgets: householdBudgets.length,
-    },
+    // Derived from `data` itself, so a table can never appear in the export
+    // but go missing from the counts (or vice versa).
+    counts: Object.fromEntries(
+      Object.entries(data).map(([key, rows]) => [key, rows.length]),
+    ) as Record<keyof typeof data, number>,
     // NOTE: receipt/document FILES are not inlined — `filePath` on each
-    // receipt points at the stored original. A future ZIP export bundles
-    // the images themselves (SPEC §28).
-    data: {
-      vendors,
-      receipts,
-      expenses,
-      incomes,
-      assets,
-      maintenance,
-      customers,
-      invoices,
-      invoiceLines,
-      payments,
-      mileage,
-      householdExpenses,
-      householdBudgets,
-    },
+    // receipt/document points at the stored original. The accountant ZIP
+    // (/api/export/package) bundles the originals themselves (SPEC §28).
+    data,
   };
 }
 

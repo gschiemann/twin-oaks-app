@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
-import { toDateInputValue } from "@/lib/dates";
+import { formatDate, toDateInputValue } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
 import {
   PAYMENT_METHODS,
@@ -10,10 +10,22 @@ import {
   RECEIPT_STATUS_LABELS,
   type ReceiptStatus,
 } from "@/lib/domain";
-import { Card, PageHeader, btnPrimaryCls, btnSecondaryCls, inputCls, labelCls } from "@/components/ui";
+import { duplicateHeadline, findLikelyDuplicates } from "@/lib/receipt-dupes";
+import {
+  Card,
+  FormError,
+  PageHeader,
+  btnPrimaryCls,
+  btnSecondaryCls,
+  inputCls,
+  labelCls,
+} from "@/components/ui";
 import { fileSrc } from "@/lib/storage";
 import SolidFileInput from "@/components/SolidFileInput";
 import { attachReceiptFile, updateReceipt } from "../actions";
+import DuplicateWarning from "../DuplicateWarning";
+import ReceiptLines from "../ReceiptLines";
+import { splitByCategory } from "../receipt-lines";
 
 export const dynamic = "force-dynamic";
 
@@ -22,16 +34,54 @@ export default async function ReceiptDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ attach?: string }>;
+  searchParams: Promise<{
+    attach?: string;
+    error?: string;
+    ld?: string;
+    lq?: string;
+    la?: string;
+    lc?: string;
+  }>;
 }) {
   const accountId = await requireAccountId();
   const { id } = await params;
-  const { attach } = await searchParams;
+  const { attach, error, ld, lq, la, lc } = await searchParams;
   const receipt = await prisma.receipt.findFirst({
     where: { id, accountId },
     include: { expense: true },
   });
   if (!receipt) notFound();
+
+  const [lines, duplicates] = await Promise.all([
+    prisma.receiptLine.findMany({
+      where: { receiptId: receipt.id, accountId },
+      orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+    }),
+    // SPEC §4 — a warning, never a gate. A receipt that has already been
+    // archived was dealt with, so it gets no warning at all.
+    receipt.status === "ARCHIVED" ? Promise.resolve([]) : findLikelyDuplicates(accountId, receipt),
+  ]);
+
+  // When this receipt was split by category it produced several expenses, but
+  // the schema can only point a receipt at one of them. The rest are found by
+  // the exact shape the split created them with — same vendor, same day, one
+  // of this receipt's own line categories. Display only, never a write.
+  const splitCategories = splitByCategory(lines).map((c) => c.accountingCategory);
+  const splitSiblings =
+    receipt.expenseId && splitCategories.length > 1 && receipt.receiptDate && receipt.vendorName
+      ? await prisma.expense.findMany({
+          where: {
+            accountId,
+            id: { not: receipt.expenseId },
+            vendorName: receipt.vendorName,
+            date: receipt.receiptDate,
+            accountingCategory: { in: splitCategories },
+          },
+          orderBy: { amountCents: "desc" },
+          take: 10,
+          select: { id: true, description: true, amountCents: true },
+        })
+      : [];
 
   const isImage = receipt.mimeType?.startsWith("image/");
 
@@ -41,6 +91,27 @@ export default async function ReceiptDetailPage({
         title={receipt.vendorName ?? "Receipt"}
         sub={`Status: ${RECEIPT_STATUS_LABELS[receipt.status as ReceiptStatus] ?? receipt.status}`}
       />
+
+      {error ? (
+        <FormError>
+          A line needs both a description and an amount (like 12.99) before it can be saved —
+          everything else on it is optional. Nothing on this receipt was changed. Fill in those two
+          in the itemised list below and tap the button again.
+        </FormError>
+      ) : null}
+
+      {duplicates.map((d) => (
+        <DuplicateWarning
+          key={d.id}
+          receiptId={receipt.id}
+          headline={duplicateHeadline(d)}
+          why={d.why}
+          otherReceiptId={d.id}
+          otherLabel={[formatDate(d.receiptDate), formatCents(d.totalCents)]
+            .filter((s) => s !== "—")
+            .join(" · ")}
+        />
+      ))}
 
       {receipt.source === "EMAIL" ? (
         <Card className="mb-4 border-sky-200 bg-sky-50">
@@ -116,6 +187,22 @@ export default async function ReceiptDetailPage({
               {receipt.expense.description} · {formatCents(receipt.expense.amountCents)}
             </Link>
           </p>
+          {splitSiblings.length > 0 ? (
+            <div className="mt-2 border-t border-oak-200 pt-2">
+              <p className="text-sm font-medium text-oak-900">
+                Split by category — also filed from this receipt:
+              </p>
+              <ul className="mt-1 space-y-1">
+                {splitSiblings.map((e) => (
+                  <li key={e.id} className="text-sm text-oak-800">
+                    <Link href={`/expenses/${e.id}`} className="font-semibold underline">
+                      {e.description} · {formatCents(e.amountCents)}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </Card>
       ) : (
         <Link
@@ -125,6 +212,15 @@ export default async function ReceiptDetailPage({
           File this receipt into Expenses
         </Link>
       )}
+
+      <ReceiptLines
+        receiptId={receipt.id}
+        lines={lines}
+        totalCents={receipt.totalCents}
+        salesTaxCents={receipt.salesTaxCents}
+        canCategorize={!receipt.expenseId}
+        typed={{ description: ld, quantity: lq, amount: la, category: lc }}
+      />
 
       <Card>
         <h2 className="mb-3 font-semibold text-stone-900">Receipt details</h2>

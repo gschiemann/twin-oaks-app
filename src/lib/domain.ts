@@ -195,3 +195,187 @@ export const MAINTENANCE_CATEGORIES = [
 ] as const;
 
 export const ASSET_STATUSES = ["ACTIVE", "SOLD", "RETIRED"] as const;
+
+// ———————————————————————————————————————————————————————————————————————
+// V3 — livestock (SPEC §§22–24). The owner runs sheep; the vocabulary here
+// is a shepherd's, not a database's.
+// ———————————————————————————————————————————————————————————————————————
+
+export const ANIMAL_SPECIES = ["Sheep", "Goat", "Cattle", "Poultry", "Other"] as const;
+
+export const ANIMAL_SEXES = ["EWE", "RAM", "WETHER"] as const;
+export type AnimalSex = (typeof ANIMAL_SEXES)[number];
+export const ANIMAL_SEX_LABELS: Record<AnimalSex, string> = {
+  EWE: "Ewe (female)",
+  RAM: "Ram (intact male)",
+  WETHER: "Wether (castrated male)",
+};
+
+export const BIRTH_TYPES = ["SINGLE", "TWIN", "TRIPLET", "QUAD"] as const;
+export type BirthType = (typeof BIRTH_TYPES)[number];
+export const BIRTH_TYPE_LABELS: Record<BirthType, string> = {
+  SINGLE: "Single",
+  TWIN: "Twin",
+  TRIPLET: "Triplet",
+  QUAD: "Quad",
+};
+
+export const ANIMAL_STATUSES = ["ACTIVE", "SOLD", "DECEASED", "TRANSFERRED"] as const;
+export type AnimalStatus = (typeof ANIMAL_STATUSES)[number];
+export const ANIMAL_STATUS_LABELS: Record<AnimalStatus, string> = {
+  ACTIVE: "In the flock",
+  SOLD: "Sold",
+  DECEASED: "Died",
+  TRANSFERRED: "Transferred out",
+};
+
+// Every event type in SPEC §23, on one screen.
+export const ANIMAL_EVENT_KINDS = [
+  "BIRTH",
+  "BREEDING",
+  "PREGNANCY_CHECK",
+  "LAMBING",
+  "WEIGHT",
+  "VACCINATION",
+  "MEDICATION",
+  "DEWORMING",
+  "SHEARING",
+  "HOOF_TRIM",
+  "INJURY",
+  "VET_VISIT",
+  "TRANSFER",
+  "DEATH",
+  "NOTE",
+] as const;
+export type AnimalEventKind = (typeof ANIMAL_EVENT_KINDS)[number];
+export const ANIMAL_EVENT_LABELS: Record<AnimalEventKind, string> = {
+  BIRTH: "Born",
+  BREEDING: "Bred",
+  PREGNANCY_CHECK: "Pregnancy check",
+  LAMBING: "Lambed",
+  WEIGHT: "Weighed",
+  VACCINATION: "Vaccination",
+  MEDICATION: "Medication",
+  DEWORMING: "Dewormed",
+  SHEARING: "Sheared",
+  HOOF_TRIM: "Hoof trim",
+  INJURY: "Injury",
+  VET_VISIT: "Vet visit",
+  TRANSFER: "Transferred",
+  DEATH: "Died",
+  NOTE: "Note",
+};
+
+// Which optional fields each event kind actually uses — the form shows only
+// these, so logging a weight never asks about a withdrawal date.
+export const ANIMAL_EVENT_FIELDS: Record<AnimalEventKind, readonly string[]> = {
+  BIRTH: ["weightLbs"],
+  BREEDING: ["mateAnimalId", "dueDate"],
+  PREGNANCY_CHECK: ["result"],
+  LAMBING: ["lambCount"],
+  WEIGHT: ["weightLbs"],
+  VACCINATION: ["productName", "dosage", "withdrawalUntil", "costCents"],
+  MEDICATION: ["productName", "dosage", "withdrawalUntil", "costCents"],
+  DEWORMING: ["productName", "dosage", "withdrawalUntil", "costCents"],
+  SHEARING: ["costCents"],
+  HOOF_TRIM: [],
+  INJURY: [],
+  VET_VISIT: ["productName", "costCents"],
+  TRANSFER: [],
+  DEATH: [],
+  NOTE: [],
+};
+
+export const PREGNANCY_RESULTS = ["BRED", "OPEN", "UNSURE"] as const;
+export const PREGNANCY_RESULT_LABELS: Record<string, string> = {
+  BRED: "Bred (pregnant)",
+  OPEN: "Open (not pregnant)",
+  UNSURE: "Not sure yet",
+};
+
+// Sheep gestation — used to suggest a due date when a breeding is logged.
+export const GESTATION_DAYS = 147;
+
+// ———————————————————————————————————————————————————————————————————————
+// V4 — manufacturing (SPEC §§12–13, 15)
+// ———————————————————————————————————————————————————————————————————————
+
+export const FILAMENT_MATERIALS = [
+  "PLA",
+  "PETG",
+  "TPU",
+  "ABS",
+  "ASA",
+  "Nylon",
+  "PC",
+  "Resin",
+  "Other",
+] as const;
+
+export const SPOOL_STATUSES = ["IN_STOCK", "IN_USE", "EMPTY", "RETIRED"] as const;
+export type SpoolStatus = (typeof SPOOL_STATUSES)[number];
+export const SPOOL_STATUS_LABELS: Record<SpoolStatus, string> = {
+  IN_STOCK: "In stock",
+  IN_USE: "Loaded / in use",
+  EMPTY: "Empty",
+  RETIRED: "Retired",
+};
+
+export const PRINT_JOB_STATUSES = ["QUEUED", "PRINTING", "DONE", "SHIPPED", "CANCELLED"] as const;
+export type PrintJobStatus = (typeof PRINT_JOB_STATUSES)[number];
+export const PRINT_JOB_STATUS_LABELS: Record<PrintJobStatus, string> = {
+  QUEUED: "Queued",
+  PRINTING: "Printing",
+  DONE: "Done",
+  SHIPPED: "Shipped",
+  CANCELLED: "Cancelled",
+};
+
+// Defaults used for a job's machine/labor cost estimate when the operator
+// hasn't set their own rates. Deliberately conservative and editable.
+export const DEFAULT_MACHINE_RATE_CENTS_PER_HOUR = 50; // $0.50/hr of printer time
+export const DEFAULT_LABOR_RATE_CENTS_PER_HOUR = 2500; // $25/hr of hands-on time
+
+// ———————————————————————————————————————————————————————————————————————
+// Banking (SPEC §18)
+// ———————————————————————————————————————————————————————————————————————
+
+export const BANK_TXN_STATUSES = ["UNMATCHED", "MATCHED", "IGNORED"] as const;
+export type BankTxnStatus = (typeof BANK_TXN_STATUSES)[number];
+export const BANK_TXN_STATUS_LABELS: Record<BankTxnStatus, string> = {
+  UNMATCHED: "Needs a match",
+  MATCHED: "Matched",
+  IGNORED: "Ignored / personal",
+};
+
+// ———————————————————————————————————————————————————————————————————————
+// Documents (SPEC §31)
+// ———————————————————————————————————————————————————————————————————————
+
+export const DOCUMENT_OWNER_TYPES = [
+  "ASSET",
+  "CUSTOMER",
+  "ANIMAL",
+  "PRINT_JOB",
+  "INVOICE",
+  "EXPENSE",
+] as const;
+export type DocumentOwnerType = (typeof DOCUMENT_OWNER_TYPES)[number];
+
+export const DOCUMENT_KINDS = [
+  "PHOTO",
+  "MANUAL",
+  "WARRANTY",
+  "PAPERWORK",
+  "CAD",
+  "DOCUMENT",
+] as const;
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
+  PHOTO: "Photo",
+  MANUAL: "Manual",
+  WARRANTY: "Warranty",
+  PAPERWORK: "Paperwork",
+  CAD: "CAD / STL file",
+  DOCUMENT: "Document",
+};

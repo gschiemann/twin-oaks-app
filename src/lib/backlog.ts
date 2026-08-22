@@ -60,7 +60,7 @@ export const BACKLOG: BacklogItem[] = [
     description:
       "Integrate an AI assistant through an API rather than giving unrestricted app access: analyze expenses, help categorize, review invoices, find missing information, analyze equipment and print-job costs, answer questions about stored records, help build reports, flag bookkeeping issues. Permission-based, limited to exposed data, with confirmation required before anything is changed, deleted, sent or finalized.",
     priority: "MEDIUM",
-    status: "NEW",
+    status: "READY_FOR_TESTING",
   },
   {
     kind: "FR",
@@ -69,7 +69,7 @@ export const BACKLOG: BacklogItem[] = [
     description:
       "A QA mode that hands the AI the current screen name, its fields/buttons/actions and sample data, with an 'Analyze this screen' function returning UX suggestions, likely bugs, missing functions and test cases — plus exportable errors and whole-workflow analysis, without granting remote access to the machine.",
     priority: "MEDIUM",
-    status: "NEW",
+    status: "READY_FOR_TESTING",
   },
   {
     kind: "FR",
@@ -99,7 +99,7 @@ export const BACKLOG: BacklogItem[] = [
     description:
       "Capture online business purchases: upload PDF/image receipts, drag-and-drop on PC, extract vendor, date, order number, line items, subtotal, tax, shipping and total, suggest a category, let the user correct before saving, keep the original attached, detect duplicates, and assign the purchase to equipment/job/property. Future: emailed receipts, Amazon history, bank CSV matching, category suggestions from vendor history.",
     priority: "HIGH",
-    status: "WORKING",
+    status: "READY_FOR_TESTING",
     devNotes:
       "Done: photo/PDF upload (see BUG-002), forwarded-email import with vendor/date/total/tax/number extraction, original always stored, duplicate suppression on email, assign-to-asset on the expense. NEW in v3.5: picking a file on Add receipt reads it and pre-fills vendor/date/total/tax/receipt# for review — PDFs with a text layer are read for free on the spot. v4.3 made scans and photos work with ZERO setup: when there is no text layer, the device itself reads the pixels (built-in OCR, all assets shipped with the app — no key, no external service), and an Anthropic API key remains an optional accuracy upgrade the server prefers when present. Open: line-item and shipping extraction, category suggestion from vendor history, drag-and-drop on desktop, bank CSV import and matching.",
   },
@@ -157,6 +157,61 @@ export const BACKLOG: BacklogItem[] = [
     status: "READY_FOR_TESTING",
     devNotes:
       "One rule now covers the whole app: every save returns to the list that item belongs to and shows a green confirmation banner at the top saying what was saved, where it went, and offering a one-tap 'add another'. Applies to receipts, expenses, income, equipment, mileage, customers and tickets. Categorizing a receipt from the Inbox returns to the Inbox (not the expense) so a stack of receipts can be worked through without navigating back each time. Invoices are the deliberate exception — a draft's next step (send it) lives on the invoice itself. Shared SavedBanner component in src/components/ui.tsx; role=\"status\" + aria-live so it is announced, not just seen. The other half of the rule shipped with it: a form that REFUSES to save now always says why in plain words (shared FormError) instead of bouncing to a blank screen — Expenses, Income, Equipment and Customers all silently swallowed that before, and on Expenses the typed description, vendor and amount now come back with the message so nothing has to be retyped (a mistyped amount also no longer drops the receipt the expense was being created from). Also: adding a household entry now confirms (it looked untouched, inviting a duplicate), Household lights up a bottom tab and is reachable from More, categorizing a receipt pre-fills the required Description from what the scan read, an empty dashboard points at Add your first receipt, and the no-picture button is no longer the big green one.",
+  },
+  {
+    kind: "FR",
+    number: 10,
+    title: "The flock — sheep records, lambing and livestock sales",
+    description:
+      "Version 3 of the plan: every sheep gets a profile, every treatment and lambing gets logged, and selling an animal puts the money on the books without double entry.",
+    priority: "HIGH",
+    status: "READY_FOR_TESTING",
+    devNotes:
+      "The ear tag is the identity (unique per account) — a duplicate tag is refused with a plain message, never a crash. One events table covers all fifteen kinds (born, bred, pregnancy check, lambed, weighed, vaccination, medication, dewormed, sheared, hoof trim, injury, vet visit, transferred, died, note) and the form only asks for the fields that kind actually uses. Breeding suggests the due date 147 days out. Medication and dewormer events carry a meat WITHDRAWAL date, and an animal inside that window shows a loud 'do not sell for meat until…' warning on its page. A sale marks the animal SOLD and auto-posts a matching Income row (Farm / Livestock sales), reversed if the sale is deleted. Expenses can be attributed to one animal, which is what makes cost-per-head real.",
+  },
+  {
+    kind: "FR",
+    number: 11,
+    title: "The shop — print jobs, filament and profit per part",
+    description:
+      "Version 4 of the plan: know what each print job actually cost, what it sold for, and which printer earns its keep.",
+    priority: "HIGH",
+    status: "READY_FOR_TESTING",
+    devNotes:
+      "Jobs auto-number JOB-001 per account and link customer → part → printer → filament → invoice. Cost is DERIVED, never stored, so it can't drift: filament grams x price per gram (waste included), printer time x machine rate, hands-on time x labour rate, plus packaging, shipping and other — then total cost, profit, profit per part and margin. Filament is tracked per spool with grams remaining, a low-stock callout, and value on hand; recording usage on a job takes the grams off the spool and gives them back if the usage is removed. A spool that a job has used cannot be deleted, so cost history is never orphaned. Printers stay Assets — no duplicate model.",
+  },
+  {
+    kind: "FR",
+    number: 12,
+    title: "Bank matching — see what you haven't recorded yet",
+    description:
+      "Upload the CSV the bank gives you and the app shows which transactions are missing from the books, without changing anything on its own.",
+    priority: "MEDIUM",
+    status: "READY_FOR_TESTING",
+    devNotes:
+      "Format-tolerant on purpose: it sniffs the delimiter, guesses the date/description/amount columns (handling both a single signed Amount and separate Debit/Credit columns) and asks you to confirm the mapping, then remembers it for that bank. Re-importing an overlapping statement adds nothing — every row carries a content fingerprint with a unique constraint. Each unmatched row offers 'yes that's it', 'add it as a new expense', or 'ignore / personal', and all three are reversible; a whole import can be undone in one action. The importer never creates or edits an expense or income row by itself — matching only records the link.",
+  },
+  {
+    kind: "FR",
+    number: 13,
+    title: "Photos, manuals and paperwork on any record",
+    description:
+      "Attach files to equipment, customers, animals, print jobs and invoices — not just to receipts.",
+    priority: "MEDIUM",
+    status: "READY_FOR_TESTING",
+    devNotes:
+      "One Document model and one reusable card, reusing the receipt storage tiering exactly (Blob → database → local disk) rather than inventing a second path. The owning record is verified to belong to your account before a byte is stored, and a file belonging to another account 404s. /documents lists everything in one place.",
+  },
+  {
+    kind: "FR",
+    number: 14,
+    title: "One file for the accountant",
+    description:
+      "A single download holding the year's sheets and every receipt image, named so the accountant can find them.",
+    priority: "HIGH",
+    status: "READY_FOR_TESTING",
+    devNotes:
+      "GET /api/export/package?year=YYYY streams a zip containing the six per-year CSVs, a receipts/ folder with every original named date_vendor_amount, a receipt-index.csv mapping each expense to its file (or 'NO RECEIPT ON FILE'), and a plain-English README. Linked from the Tax Center. There is a JSON preflight so the UI can warn before a slow download on a phone.",
   },
 ];
 

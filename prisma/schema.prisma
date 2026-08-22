@@ -68,6 +68,7 @@ model Receipt {
   notes         String?
   expenseId     String?
   expense       Expense?  @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  lines         ReceiptLine[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -93,6 +94,10 @@ model Expense {
   businessPurpose    String?
   assetId            String?
   asset              Asset?              @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  // V3: costs can be attributed to one animal, which is what makes
+  // cost-per-head and cost-per-lamb-weaned computable.
+  animalId           String?
+  animal             Animal?             @relation(fields: [animalId], references: [id], onDelete: SetNull)
   taxYear            Int
   // Tax-safety principle: the app NEVER assumes deductibility. New expenses
   // default to NEEDS_REVIEW until a human classifies them.
@@ -454,5 +459,296 @@ model MaintenanceRecord {
   updatedAt      DateTime @updatedAt
 
   @@index([assetId, date])
+  @@index([accountId])
+}
+
+// ———————————————————————————————————————————————————————————————————————
+// V3 — Farm / livestock (SPEC §§22–24)
+// ———————————————————————————————————————————————————————————————————————
+
+// One animal. The owner's handle is the ear tag, so that is what must be
+// unique per account — names are optional and often absent.
+model Animal {
+  id                   String        @id @default(cuid())
+  accountId            String
+  tagNumber            String // ear tag — the owner's primary handle
+  name                 String?
+  species              String        @default("Sheep") // see ANIMAL_SPECIES
+  breed                String?
+  sex                  String // EWE | RAM | WETHER — see ANIMAL_SEXES
+  birthDate            DateTime?
+  birthType            String? // SINGLE | TWIN | TRIPLET | QUAD
+  sireId               String?
+  sire                 Animal?       @relation("AnimalSire", fields: [sireId], references: [id], onDelete: SetNull)
+  siredOffspring       Animal[]      @relation("AnimalSire")
+  damId                String?
+  dam                  Animal?       @relation("AnimalDam", fields: [damId], references: [id], onDelete: SetNull)
+  bornOffspring        Animal[]      @relation("AnimalDam")
+  // ACTIVE | SOLD | DECEASED | TRANSFERRED — see ANIMAL_STATUSES
+  status               String        @default("ACTIVE")
+  acquisitionDate      DateTime?
+  acquisitionCostCents Int?
+  currentWeightLbs     Float?
+  photoPath            String?
+  notes                String?
+  events               AnimalEvent[]
+  expenses             Expense[]
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@unique([accountId, tagNumber])
+  @@index([accountId])
+  @@index([accountId, status])
+}
+
+// Every event in SPEC §23 rides one table — a shepherd logging a vaccination
+// and a lambing should not meet two different screens. Type-specific fields
+// are optional columns; the form shows only the ones the chosen kind uses.
+model AnimalEvent {
+  id              String    @id @default(cuid())
+  accountId       String
+  animalId        String
+  animal          Animal    @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  date            DateTime
+  kind            String // see ANIMAL_EVENT_KINDS
+  description     String?
+  weightLbs       Float? // WEIGHT
+  productName     String? // VACCINATION | MEDICATION | DEWORMING — what was given
+  dosage          String?
+  // Meat/milk withdrawal — a real legal date, not a nicety.
+  withdrawalUntil DateTime?
+  mateAnimalId    String? // BREEDING — the ram used
+  dueDate         DateTime? // BREEDING — expected lambing
+  result          String? // PREGNANCY_CHECK: BRED | OPEN | UNSURE
+  lambCount       Int? // LAMBING
+  costCents       Int?
+  expenseId       String? // the Expense row this event cost, when it cost money
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([accountId, date])
+  @@index([animalId, date])
+  @@index([accountId, kind])
+}
+
+// A sale of an animal. Posts a linked Income row the same way Payment does,
+// so the books need no double entry.
+model LivestockSale {
+  id              String    @id @default(cuid())
+  accountId       String
+  animalId        String?
+  customerId      String?
+  buyerName       String?
+  date            DateTime
+  salePriceCents  Int
+  weightLbs       Float?
+  paymentMethod   String?
+  incomeId        String? // auto-created Income row
+  processingNotes String?
+  notes           String?
+  taxYear         Int
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([accountId, date])
+  @@index([animalId])
+  @@index([accountId, taxYear])
+}
+
+// ———————————————————————————————————————————————————————————————————————
+// V4 — Manufacturing / 3D printing (SPEC §§12–13, 15)
+// Printers are Assets already — this extends them, it does not duplicate.
+// ———————————————————————————————————————————————————————————————————————
+
+model FilamentSpool {
+  id                 String        @id @default(cuid())
+  accountId          String
+  manufacturer       String?
+  material           String // see FILAMENT_MATERIALS
+  colorName          String?
+  spoolTag           String? // the owner's own label on the spool
+  purchaseDate       DateTime?
+  purchasePriceCents Int?
+  totalGrams         Float         @default(1000)
+  remainingGrams     Float         @default(1000)
+  wasteGrams         Float         @default(0)
+  // IN_STOCK | IN_USE | EMPTY | RETIRED — see SPOOL_STATUSES
+  status             String        @default("IN_STOCK")
+  printerAssetId     String? // loaded on / compatible with
+  receiptId          String?
+  expenseId          String?
+  notes              String?
+  uses               FilamentUse[]
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([accountId])
+  @@index([accountId, status])
+}
+
+// Customer -> part -> printer -> filament -> invoice, in one row plus its
+// filament uses. Every money figure that can be DERIVED is derived in code
+// (src/lib/manufacturing.ts) so it can never drift from its inputs.
+model PrintJob {
+  id                      String        @id @default(cuid())
+  accountId               String
+  jobNumber               String // "JOB-001" — unique per account
+  partName                String
+  partNumber              String?
+  description             String?
+  customerId              String?
+  printerAssetId          String?
+  quantity                Int           @default(1)
+  failedCount             Int           @default(0)
+  printMinutes            Int?
+  laborMinutes            Int?
+  machineRateCentsPerHour Int?
+  laborRateCentsPerHour   Int?
+  packagingCostCents      Int?
+  shippingCostCents       Int?
+  otherCostCents          Int?
+  salePriceCents          Int?
+  invoiceId               String? // revenue lives on the invoice; never double counted
+  // QUEUED | PRINTING | DONE | SHIPPED | CANCELLED — see PRINT_JOB_STATUSES
+  status                  String        @default("QUEUED")
+  startedAt               DateTime?
+  completedAt             DateTime?
+  notes                   String?
+  filamentUses            FilamentUse[]
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@unique([accountId, jobNumber])
+  @@index([accountId])
+  @@index([accountId, status])
+  @@index([customerId])
+  @@index([printerAssetId])
+}
+
+// Grams pulled from a spool for a job — decrements the spool's remaining.
+model FilamentUse {
+  id         String        @id @default(cuid())
+  accountId  String
+  printJobId String
+  printJob   PrintJob      @relation(fields: [printJobId], references: [id], onDelete: Cascade)
+  spoolId    String
+  spool      FilamentSpool @relation(fields: [spoolId], references: [id], onDelete: Cascade)
+  grams      Float
+  wasteGrams Float         @default(0)
+  createdAt  DateTime      @default(now())
+
+  @@index([printJobId])
+  @@index([spoolId])
+  @@index([accountId])
+}
+
+// ———————————————————————————————————————————————————————————————————————
+// V2 remainder — bank transaction matching (SPEC §18)
+// ———————————————————————————————————————————————————————————————————————
+
+model BankTransaction {
+  id               String   @id @default(cuid())
+  accountId        String
+  bankName         String?
+  importBatchId    String?
+  date             DateTime
+  description      String
+  // Negative = money out, positive = money in. Always as the bank stated it.
+  amountCents      Int
+  balanceCents     Int?
+  // Stable hash of (date, description, amount) so re-importing an overlapping
+  // statement can never duplicate a row.
+  fingerprint      String
+  // UNMATCHED | MATCHED | IGNORED — see BANK_TXN_STATUSES
+  status           String   @default("UNMATCHED")
+  matchedExpenseId String?
+  matchedIncomeId  String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([accountId, fingerprint])
+  @@index([accountId, status])
+  @@index([accountId, date])
+}
+
+// Remembers how a given bank's CSV columns map, so the second import of the
+// same statement format asks nothing.
+model BankImportProfile {
+  id          String   @id @default(cuid())
+  accountId   String
+  bankName    String
+  mappingJson String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([accountId, bankName])
+  @@index([accountId])
+}
+
+// ———————————————————————————————————————————————————————————————————————
+// Generalized document storage (SPEC §31) — photos, manuals, warranties,
+// paperwork, CAD files, attached to ANY record.
+// ———————————————————————————————————————————————————————————————————————
+
+model Document {
+  id        String   @id @default(cuid())
+  accountId String
+  ownerType String // ASSET | CUSTOMER | ANIMAL | PRINT_JOB | INVOICE | EXPENSE
+  ownerId   String
+  kind      String   @default("DOCUMENT") // see DOCUMENT_KINDS
+  title     String
+  filePath  String // same storage tiering as receipts (src/lib/storage.ts)
+  fileName  String
+  mimeType  String
+  fileSize  Int
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([accountId, ownerType, ownerId])
+  @@index([accountId])
+}
+
+// ———————————————————————————————————————————————————————————————————————
+// FR-006 remainder — itemised receipt lines
+// ———————————————————————————————————————————————————————————————————————
+
+model ReceiptLine {
+  id                 String  @id @default(cuid())
+  accountId          String
+  receiptId          String
+  receipt            Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  sortOrder          Int     @default(0)
+  description        String
+  quantity           Float   @default(1)
+  amountCents        Int
+  // Optional per-line category so one receipt can split across categories.
+  accountingCategory String?
+
+  @@index([receiptId])
+  @@index([accountId])
+}
+
+// ———————————————————————————————————————————————————————————————————————
+// Dashboard — upcoming bills (SPEC §2)
+// A business bill is DECLARED here and shown as upcoming; it is never
+// auto-posted to the books. Money leaving the business stays deliberate.
+// ———————————————————————————————————————————————————————————————————————
+
+model RecurringBill {
+  id                 String   @id @default(cuid())
+  accountId          String
+  description        String
+  amountCents        Int
+  division           String
+  accountingCategory String
+  vendorName         String?
+  dayOfMonth         Int      @default(1) // 1–28 so it exists in every month
+  active             Boolean  @default(true)
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
   @@index([accountId])
 }

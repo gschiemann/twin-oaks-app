@@ -13,6 +13,7 @@ import {
   paidCentsOf,
 } from "../../invoices/invoice-bits";
 import { deleteCustomer } from "../actions";
+import DocumentsCard from "@/components/DocumentsCard";
 
 export const dynamic = "force-dynamic";
 
@@ -153,6 +154,8 @@ export default async function CustomerDetailPage({
           </button>
         </form>
       ) : null}
+
+      <DocumentsCard ownerType="CUSTOMER" ownerId={customer.id} title="Paperwork & files" />
     </div>
   );
 }

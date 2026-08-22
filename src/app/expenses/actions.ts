@@ -1,11 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { attachExpenseToBankTransaction } from "@/app/banking/link-expense";
 import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
 import { parseDateInput, taxYearOf } from "@/lib/dates";
 import { parseDollarsToCents } from "@/lib/money";
 import { ALL_DIVISIONS, TAX_STATUSES } from "@/lib/domain";
+import { splitByCategory } from "../receipts/receipt-lines";
 
 function str(v: FormDataEntryValue | null): string | null {
   if (typeof v !== "string") return null;
@@ -70,11 +72,15 @@ export async function createExpense(formData: FormData) {
   // validation bounce below, so a typo'd amount can't silently orphan the
   // receipt it came from.
   const fromReceiptId = str(formData.get("fromReceiptId"));
+  // Same reasoning for a bank line: read it BEFORE the bounce so a typo'd
+  // amount can't leave the transaction stranded on the review list.
+  const fromBankTxn = str(formData.get("fromBankTxn"));
   const data = await expenseDataFromForm(accountId, formData);
   if (!data) {
     // Hand the typed values straight back so nothing has to be retyped.
     const back = new URLSearchParams({ error: "missing" });
     if (fromReceiptId) back.set("fromReceipt", fromReceiptId);
+    if (fromBankTxn) back.set("fromBankTxn", fromBankTxn);
     for (const [key, field] of [["d", "description"], ["v", "vendorName"], ["a", "amount"]]) {
       const value = str(formData.get(field));
       if (value) back.set(key, value.slice(0, 200));
@@ -99,9 +105,106 @@ export async function createExpense(formData: FormData) {
       .catch(() => {}); // receipt may have been archived meanwhile — expense still stands
   }
 
+  if (fromBankTxn) {
+    // Never throws — a failed link must not undo a save that already worked.
+    await attachExpenseToBankTransaction(accountId, fromBankTxn, expense.id);
+    redirect("/banking?matched=1");
+  }
+
   // Categorizing from the Inbox drops you back in the Inbox to do the next
   // one; everything else lands on the Expenses list. Never a dead-end page.
   redirect(fromReceiptId ? "/receipts?categorized=1" : "/expenses?saved=1");
+}
+
+// FR-006 — one receipt, several categories, one expense each.
+//
+// NEVER automatic. This runs only when the operator taps the split button on
+// the categorize screen, and that button only exists when the receipt's own
+// lines name two or more accounting categories. The single-expense path is
+// untouched and remains the default.
+//
+// Every guarantee createExpense makes still holds here: the receipt id is
+// read BEFORE anything can bounce, a rejected split lands on a form that says
+// why, and a successful one links the receipt, marks it CATEGORIZED, and
+// finishes on the Inbox with the same confirmation.
+export async function createSplitExpensesFromReceipt(formData: FormData) {
+  const accountId = await requireAccountId();
+  // Read first — a validation bounce must never orphan the receipt it came
+  // from (same reason as createExpense).
+  const fromReceiptId = str(formData.get("fromReceiptId"));
+  if (!fromReceiptId) redirect("/expenses/new?error=missing");
+
+  const receipt = await prisma.receipt.findFirst({ where: { id: fromReceiptId, accountId } });
+  if (!receipt) redirect("/expenses/new?error=missing");
+
+  const bounce = `/expenses/new?fromReceipt=${fromReceiptId}&error=split`;
+
+  const division = str(formData.get("division"));
+  if (!division || !(ALL_DIVISIONS as readonly string[]).includes(division)) redirect(bounce);
+
+  const lines = await prisma.receiptLine.findMany({
+    where: { receiptId: receipt.id, accountId },
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+  });
+  const parts = splitByCategory(lines);
+  // Nothing to split — the operator should use the ordinary form.
+  if (parts.length < 2) redirect(bounce);
+
+  // The receipt's own day keeps every part on the date of the purchase.
+  const date = receipt.receiptDate ?? new Date();
+  const vendorName = receipt.vendorName;
+
+  // Vendors dedupe by name (per account), exactly like the single path.
+  let vendorId: string | null = null;
+  if (vendorName) {
+    const vendor = await prisma.vendor.upsert({
+      where: { accountId_name: { accountId, name: vendorName } },
+      create: { accountId, name: vendorName },
+      update: {},
+    });
+    vendorId = vendor.id;
+  }
+
+  const created: { id: string }[] = [];
+  for (const [i, part] of parts.entries()) {
+    const expense = await prisma.expense.create({
+      data: {
+        accountId,
+        date,
+        taxYear: taxYearOf(date),
+        amountCents: part.amountCents,
+        description:
+          part.lineCount === 1
+            ? part.descriptions[0]
+            : `${part.accountingCategory} — ${part.lineCount} items`,
+        division,
+        accountingCategory: part.accountingCategory,
+        vendorId,
+        vendorName,
+        paymentMethod: receipt.paymentMethod,
+        // The paper trail, in the operator's own words.
+        notes: `Part ${i + 1} of ${parts.length} — one receipt${
+          vendorName ? ` from ${vendorName}` : ""
+        }, split by category.`,
+        // Tax-safety principle (SPEC §1): a split is bookkeeping, not a
+        // deductibility call. Every part still starts at NEEDS_REVIEW.
+        taxStatus: "NEEDS_REVIEW",
+      },
+    });
+    created.push(expense);
+  }
+
+  // A receipt row can only point at one expense, so it points at the biggest
+  // part; the receipt page finds the rest from it. The receipt is linked and
+  // categorized either way — it is never left in the Inbox after being filed.
+  await prisma.receipt
+    .updateMany({
+      where: { id: receipt.id, accountId },
+      data: { expenseId: created[0].id, status: "CATEGORIZED" },
+    })
+    .catch(() => {}); // archived meanwhile — the expenses still stand
+
+  redirect("/receipts?categorized=1");
 }
 
 export async function updateExpense(formData: FormData) {
