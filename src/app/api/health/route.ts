@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   return Response.json({
     app: "twin-oaks-os",
-    phase: "v5.2-receipt-bin",
+    phase: "v5.3-terse",
     // Which file backend this deployment runs with (true = Blob store
     // connected; false = database fallback). Boolean only — never the token.
     blob: Boolean(process.env.BLOB_READ_WRITE_TOKEN),

@@ -96,17 +96,11 @@ export default async function ReceiptsPage({
       ) : null}
 
       {deleted ? (
-        <SavedBanner
-          title="Receipt deleted."
-          hint="It's gone for good, along with its picture. Any expense it was attached to is still on the books — it just has no receipt now."
-        />
+        <SavedBanner title="Receipt deleted." />
       ) : null}
 
       {archived ? (
-        <SavedBanner
-          title="Receipt archived."
-          hint="Nothing was deleted — the receipt and its original photo are kept forever. Switch to the All tab any time you want to see it."
-        />
+        <SavedBanner title="Receipt archived." hint="Find it under the All tab." />
       ) : null}
 
       <div className="mb-4 flex gap-2">

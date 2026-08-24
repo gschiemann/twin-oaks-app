@@ -105,25 +105,24 @@ export default async function ReceiptDetailPage({
 
       {confirm === "delete" ? (
         <Card className="mb-4 border-2 border-red-300 bg-red-50">
-          <p className="text-base font-semibold text-red-900">Delete this receipt for good?</p>
-          <p className="mt-1 text-sm text-red-800">
-            The receipt and its picture are deleted permanently. This cannot be undone.
-            {receipt.expense
-              ? ` The expense \u201C${receipt.expense.description}\u201D stays on your books \u2014 it just won\u2019t have a receipt attached any more.`
-              : ""}
-          </p>
-          <form action={deleteReceipt} className="mt-3">
-            <input type="hidden" name="id" value={receipt.id} />
-            <button type="submit" className={`${btnPrimaryCls} w-full bg-red-700 active:bg-red-800`}>
-              Yes, delete it for good
-            </button>
-          </form>
-          <Link
-            href={from === "list" ? "/receipts" : `/receipts/${receipt.id}`}
-            className={`${btnSecondaryCls} mt-2 w-full`}
-          >
-            No, keep it
-          </Link>
+          <p className="text-base font-semibold text-red-900">Delete this receipt?</p>
+          <div className="mt-3 flex gap-2">
+            <form action={deleteReceipt} className="flex-1">
+              <input type="hidden" name="id" value={receipt.id} />
+              <button
+                type="submit"
+                className={`${btnPrimaryCls} w-full bg-red-700 active:bg-red-800`}
+              >
+                Delete
+              </button>
+            </form>
+            <Link
+              href={from === "list" ? "/receipts" : `/receipts/${receipt.id}`}
+              className={`${btnSecondaryCls} flex-1`}
+            >
+              Cancel
+            </Link>
+          </div>
         </Card>
       ) : null}
 
@@ -377,39 +376,20 @@ export default async function ReceiptDetailPage({
           before it does anything. */}
       {confirm === "delete" ? null : (
         <Card className="mt-4">
-          <h2 className="font-semibold text-stone-900">Get rid of this receipt</h2>
-          {receipt.status === "ARCHIVED" ? (
-            <>
-              <p className="mt-1 text-sm text-stone-600">
-                This one is archived \u2014 out of your Inbox, but nothing was lost.
-              </p>
-              <form action={unarchiveReceipt} className="mt-3">
-                <input type="hidden" name="id" value={receipt.id} />
-                <button type="submit" className={`${btnSecondaryCls} w-full`}>
-                  Put it back
-                </button>
-              </form>
-            </>
-          ) : (
-            <>
-              <p className="mt-1 text-sm text-stone-600">
-                Archiving takes it out of your Inbox but keeps the receipt and its picture, so you
-                can always find it again. That is usually what you want.
-              </p>
-              <form action={archiveReceipt} className="mt-3">
-                <input type="hidden" name="id" value={receipt.id} />
-                <button type="submit" className={`${btnSecondaryCls} w-full`}>
-                  Archive it (keeps everything)
-                </button>
-              </form>
-            </>
-          )}
-          <Link
-            href={`/receipts/${receipt.id}?confirm=delete`}
-            className="mt-3 block text-center text-sm font-medium text-red-600 underline-offset-2 active:underline"
-          >
-            Delete it for good
-          </Link>
+          <div className="flex gap-2">
+            <form action={receipt.status === "ARCHIVED" ? unarchiveReceipt : archiveReceipt} className="flex-1">
+              <input type="hidden" name="id" value={receipt.id} />
+              <button type="submit" className={`${btnSecondaryCls} w-full`}>
+                {receipt.status === "ARCHIVED" ? "Unarchive" : "Archive"}
+              </button>
+            </form>
+            <Link
+              href={`/receipts/${receipt.id}?confirm=delete`}
+              className={`${btnSecondaryCls} flex-1 text-red-600`}
+            >
+              Delete
+            </Link>
+          </div>
         </Card>
       )}
     </div>
