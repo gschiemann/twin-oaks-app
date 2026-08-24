@@ -226,3 +226,79 @@ export async function archiveDuplicateReceipt(formData: FormData) {
   await prisma.receipt.updateMany({ where: { id, accountId }, data: { status: "ARCHIVED" } });
   redirect("/receipts?archived=1");
 }
+
+// Archive from anywhere, not just the duplicate warning. This is the SAFE
+// way to get a receipt out of the way: nothing is destroyed, and it can be
+// found again under the All tab.
+export async function archiveReceipt(formData: FormData) {
+  const accountId = await requireAccountId();
+  const id = str(formData.get("id"));
+  if (!id) redirect("/receipts");
+
+  await prisma.receipt.updateMany({ where: { id, accountId }, data: { status: "ARCHIVED" } });
+  redirect("/receipts?archived=1");
+}
+
+// Put an archived receipt back where it was, so archiving is never a
+// one-way door.
+export async function unarchiveReceipt(formData: FormData) {
+  const accountId = await requireAccountId();
+  const id = str(formData.get("id"));
+  if (!id) redirect("/receipts");
+
+  // Back to the Inbox unless it is already accounted for by an expense.
+  const receipt = await prisma.receipt.findFirst({
+    where: { id, accountId },
+    select: { expenseId: true },
+  });
+  await prisma.receipt.updateMany({
+    where: { id, accountId },
+    data: { status: receipt?.expenseId ? "CATEGORIZED" : "INBOX" },
+  });
+  redirect(`/receipts/${id}`);
+}
+
+// Delete a receipt for good, original and all.
+//
+// This is the one action in the receipts module that destroys something, so
+// it is deliberately two-step (the page asks first) and it cleans up after
+// itself: a database-stored original is a row we own, and leaving it behind
+// would quietly keep using space the operator thinks they freed.
+//
+// What it does NOT do: touch the expense this receipt documents. The money
+// was really spent — deleting the paperwork must never silently rewrite the
+// books. The expense simply goes back to having no receipt attached, which
+// the dashboard already counts as "missing documentation".
+export async function deleteReceipt(formData: FormData) {
+  const accountId = await requireAccountId();
+  const id = str(formData.get("id"));
+  if (!id) redirect("/receipts");
+
+  // Read the storage key first (scoped), so we know what to clean up.
+  const receipt = await prisma.receipt.findFirst({
+    where: { id, accountId },
+    select: { id: true, filePath: true },
+  });
+  if (!receipt) redirect("/receipts");
+
+  // Lines are removed explicitly rather than relying on the cascade, so the
+  // behaviour is identical whichever database this runs on.
+  await prisma.receiptLine.deleteMany({ where: { receiptId: id, accountId } });
+  const removed = await prisma.receipt.deleteMany({ where: { id, accountId } });
+  if (removed.count === 0) redirect("/receipts");
+
+  // Database-backed originals ("db:<id>") are rows we own — drop the bytes
+  // once nothing else points at the same key.
+  if (receipt.filePath?.startsWith("db:")) {
+    const storedFileId = receipt.filePath.slice(3);
+    const [otherReceipts, otherDocs] = await Promise.all([
+      prisma.receipt.count({ where: { accountId, filePath: receipt.filePath } }),
+      prisma.document.count({ where: { accountId, filePath: receipt.filePath } }),
+    ]);
+    if (otherReceipts === 0 && otherDocs === 0) {
+      await prisma.storedFile.deleteMany({ where: { id: storedFileId, accountId } });
+    }
+  }
+
+  redirect("/receipts?deleted=1");
+}

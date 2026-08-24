@@ -26,10 +26,11 @@ export default async function ReceiptsPage({
     categorized?: string;
     updated?: string;
     archived?: string;
+    deleted?: string;
   }>;
 }) {
   const accountId = await requireAccountId();
-  const { tab = "inbox", saved, categorized, updated, archived } = await searchParams;
+  const { tab = "inbox", saved, categorized, updated, archived, deleted } = await searchParams;
 
   const where = {
     accountId,
@@ -90,6 +91,13 @@ export default async function ReceiptsPage({
         <SavedBanner
           title="Receipt filed."
           hint="It's recorded under Expenses. Tap the next receipt below to file that one too."
+        />
+      ) : null}
+
+      {deleted ? (
+        <SavedBanner
+          title="Receipt deleted."
+          hint="It's gone for good, along with its picture. Any expense it was attached to is still on the books — it just has no receipt now."
         />
       ) : null}
 

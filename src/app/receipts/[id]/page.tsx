@@ -22,7 +22,13 @@ import {
 } from "@/components/ui";
 import { fileSrc } from "@/lib/storage";
 import SolidFileInput from "@/components/SolidFileInput";
-import { attachReceiptFile, updateReceipt } from "../actions";
+import {
+  archiveReceipt,
+  attachReceiptFile,
+  deleteReceipt,
+  unarchiveReceipt,
+  updateReceipt,
+} from "../actions";
 import DuplicateWarning from "../DuplicateWarning";
 import ReceiptLines from "../ReceiptLines";
 import { splitByCategory } from "../receipt-lines";
@@ -41,11 +47,13 @@ export default async function ReceiptDetailPage({
     lq?: string;
     la?: string;
     lc?: string;
+    // Set by the first press of Delete — the page then asks before doing it.
+    confirm?: string;
   }>;
 }) {
   const accountId = await requireAccountId();
   const { id } = await params;
-  const { attach, error, ld, lq, la, lc } = await searchParams;
+  const { attach, error, ld, lq, la, lc, confirm } = await searchParams;
   const receipt = await prisma.receipt.findFirst({
     where: { id, accountId },
     include: { expense: true },
@@ -335,6 +343,67 @@ export default async function ReceiptDetailPage({
           </button>
         </form>
       </Card>
+
+      {/* Getting rid of a receipt. Archiving is offered first and framed as
+          the normal choice, because this app's whole promise is that the
+          original is kept forever — deleting is the exception, so it asks
+          before it does anything. */}
+      {confirm === "delete" ? (
+        <Card className="mt-4 border-2 border-red-300 bg-red-50">
+          <p className="text-base font-semibold text-red-900">Delete this receipt for good?</p>
+          <p className="mt-1 text-sm text-red-800">
+            The receipt and its picture are deleted permanently. This cannot be undone.
+            {receipt.expense
+              ? ` The expense \u201C${receipt.expense.description}\u201D stays on your books \u2014 it just won\u2019t have a receipt attached any more.`
+              : ""}
+          </p>
+          <form action={deleteReceipt} className="mt-3">
+            <input type="hidden" name="id" value={receipt.id} />
+            <button type="submit" className={`${btnPrimaryCls} w-full bg-red-700 active:bg-red-800`}>
+              Yes, delete it for good
+            </button>
+          </form>
+          <Link href={`/receipts/${receipt.id}`} className={`${btnSecondaryCls} mt-2 w-full`}>
+            No, keep it
+          </Link>
+        </Card>
+      ) : (
+        <Card className="mt-4">
+          <h2 className="font-semibold text-stone-900">Get rid of this receipt</h2>
+          {receipt.status === "ARCHIVED" ? (
+            <>
+              <p className="mt-1 text-sm text-stone-600">
+                This one is archived \u2014 out of your Inbox, but nothing was lost.
+              </p>
+              <form action={unarchiveReceipt} className="mt-3">
+                <input type="hidden" name="id" value={receipt.id} />
+                <button type="submit" className={`${btnSecondaryCls} w-full`}>
+                  Put it back
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-sm text-stone-600">
+                Archiving takes it out of your Inbox but keeps the receipt and its picture, so you
+                can always find it again. That is usually what you want.
+              </p>
+              <form action={archiveReceipt} className="mt-3">
+                <input type="hidden" name="id" value={receipt.id} />
+                <button type="submit" className={`${btnSecondaryCls} w-full`}>
+                  Archive it (keeps everything)
+                </button>
+              </form>
+            </>
+          )}
+          <Link
+            href={`/receipts/${receipt.id}?confirm=delete`}
+            className="mt-3 block text-center text-sm font-medium text-red-600 underline-offset-2 active:underline"
+          >
+            Delete it for good
+          </Link>
+        </Card>
+      )}
     </div>
   );
 }
