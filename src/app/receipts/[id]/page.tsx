@@ -49,11 +49,14 @@ export default async function ReceiptDetailPage({
     lc?: string;
     // Set by the first press of Delete — the page then asks before doing it.
     confirm?: string;
+    // "list" when the bin on the receipts list started this, so "No, keep it"
+    // goes back where they were instead of stranding them here.
+    from?: string;
   }>;
 }) {
   const accountId = await requireAccountId();
   const { id } = await params;
-  const { attach, error, ld, lq, la, lc, confirm } = await searchParams;
+  const { attach, error, ld, lq, la, lc, confirm, from } = await searchParams;
   const receipt = await prisma.receipt.findFirst({
     where: { id, accountId },
     include: { expense: true },
@@ -99,6 +102,30 @@ export default async function ReceiptDetailPage({
         title={receipt.vendorName ?? "Receipt"}
         sub={`Status: ${RECEIPT_STATUS_LABELS[receipt.status as ReceiptStatus] ?? receipt.status}`}
       />
+
+      {confirm === "delete" ? (
+        <Card className="mb-4 border-2 border-red-300 bg-red-50">
+          <p className="text-base font-semibold text-red-900">Delete this receipt for good?</p>
+          <p className="mt-1 text-sm text-red-800">
+            The receipt and its picture are deleted permanently. This cannot be undone.
+            {receipt.expense
+              ? ` The expense \u201C${receipt.expense.description}\u201D stays on your books \u2014 it just won\u2019t have a receipt attached any more.`
+              : ""}
+          </p>
+          <form action={deleteReceipt} className="mt-3">
+            <input type="hidden" name="id" value={receipt.id} />
+            <button type="submit" className={`${btnPrimaryCls} w-full bg-red-700 active:bg-red-800`}>
+              Yes, delete it for good
+            </button>
+          </form>
+          <Link
+            href={from === "list" ? "/receipts" : `/receipts/${receipt.id}`}
+            className={`${btnSecondaryCls} mt-2 w-full`}
+          >
+            No, keep it
+          </Link>
+        </Card>
+      ) : null}
 
       {error ? (
         <FormError>
@@ -348,26 +375,7 @@ export default async function ReceiptDetailPage({
           the normal choice, because this app's whole promise is that the
           original is kept forever — deleting is the exception, so it asks
           before it does anything. */}
-      {confirm === "delete" ? (
-        <Card className="mt-4 border-2 border-red-300 bg-red-50">
-          <p className="text-base font-semibold text-red-900">Delete this receipt for good?</p>
-          <p className="mt-1 text-sm text-red-800">
-            The receipt and its picture are deleted permanently. This cannot be undone.
-            {receipt.expense
-              ? ` The expense \u201C${receipt.expense.description}\u201D stays on your books \u2014 it just won\u2019t have a receipt attached any more.`
-              : ""}
-          </p>
-          <form action={deleteReceipt} className="mt-3">
-            <input type="hidden" name="id" value={receipt.id} />
-            <button type="submit" className={`${btnPrimaryCls} w-full bg-red-700 active:bg-red-800`}>
-              Yes, delete it for good
-            </button>
-          </form>
-          <Link href={`/receipts/${receipt.id}`} className={`${btnSecondaryCls} mt-2 w-full`}>
-            No, keep it
-          </Link>
-        </Card>
-      ) : (
+      {confirm === "delete" ? null : (
         <Card className="mt-4">
           <h2 className="font-semibold text-stone-900">Get rid of this receipt</h2>
           {receipt.status === "ARCHIVED" ? (

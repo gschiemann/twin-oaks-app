@@ -6,6 +6,7 @@ import { formatCents } from "@/lib/money";
 import { RECEIPT_STATUS_LABELS, type ReceiptStatus } from "@/lib/domain";
 import { duplicateHeadline, findLikelyDuplicatesForMany } from "@/lib/receipt-dupes";
 import { Card, Chip, EmptyState, PageHeader, SavedBanner, btnPrimaryCls } from "@/components/ui";
+import { TrashIcon } from "@/components/Icons";
 import { ReceiptThumb, receiptStatusTone } from "./receipt-bits";
 import DuplicateWarning from "./DuplicateWarning";
 
@@ -138,8 +139,14 @@ export default async function ReceiptsPage({
             const dupe = duplicates.get(r.id)?.[0];
             return (
               <div key={r.id}>
-                <Link href={`/receipts/${r.id}`} className="block">
-                  <Card className="flex items-center gap-3 active:bg-stone-50">
+                {/* The row's tap target and the bin are SIBLINGS inside the
+                    card, never nested — a link inside a link is broken on a
+                    phone (same reason the duplicate warning sits outside). */}
+                <Card className="flex items-center gap-2">
+                  <Link
+                    href={`/receipts/${r.id}`}
+                    className="flex min-w-0 flex-1 items-center gap-3 active:opacity-60"
+                  >
                     <ReceiptThumb filePath={r.filePath} mimeType={r.mimeType} source={r.source} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-semibold text-stone-900">
@@ -161,8 +168,18 @@ export default async function ReceiptsPage({
                     <div className="text-right font-bold tabular-nums text-stone-900">
                       {formatCents(r.totalCents)}
                     </div>
-                  </Card>
-                </Link>
+                  </Link>
+                  {/* Goes to the same question the receipt page asks — a
+                      stray thumb while scrolling must never destroy an
+                      original. 44px tap target, Apple's minimum. */}
+                  <Link
+                    href={`/receipts/${r.id}?confirm=delete&from=list`}
+                    aria-label={`Delete the ${r.vendorName ?? "unknown vendor"} receipt`}
+                    className="-mr-1.5 shrink-0 rounded-xl p-3 text-stone-400 active:bg-red-50 active:text-red-600"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                  </Link>
+                </Card>
 
                 {/* Outside the row's link on purpose: this card has its own
                     link and buttons, and a link inside a link is broken on a
