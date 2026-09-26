@@ -84,8 +84,12 @@ feature work.
   (`incomeCategoryForDivision`) for its PRE-TAX share only — the sales tax
   in a payment is owed to the state (`src/lib/sales-tax/split.ts` allocates
   it in recording order); deleting the payment deletes that row. Income
-  booked before that split is flagged per payment and fixed only on the
-  owner's confirmation, never automatically.
+  booked before that split is flagged per payment and fixed only on
+  confirmation, never automatically — except the owner's own rows, which
+  the owner explicitly asked to have corrected once
+  (`src/lib/data-fixes.ts`, run from the root layout; idempotent,
+  conditional updates, a dated note on every changed row). One-off data
+  corrections go there, never into page code.
   Invoice numbers are `INV-NNN` via `nextInvoiceNumber`.
 - **Schema changes MUST update `src/lib/ensure-schema.ts`:** regenerate the
   DDL (`prisma migrate diff --from-empty --to-schema-datamodel

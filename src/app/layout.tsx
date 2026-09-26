@@ -5,6 +5,7 @@ import BottomNav from "@/components/BottomNav";
 import { currentAccountId, OWNER_ACCOUNT_ID } from "@/lib/auth";
 import { getBusinessProfile } from "@/lib/business";
 import { ensureSchema } from "@/lib/ensure-schema";
+import { runDataFixes } from "@/lib/data-fixes";
 
 export const metadata: Metadata = {
   title: "Twin Oaks OS",
@@ -22,7 +23,9 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Self-heal the database schema before any page queries run (memoized;
   // never throws — pages surface a friendly diagnostic if the DB is down).
-  await ensureSchema();
+  // Then any one-off data corrections the owner asked for (same rules).
+  const db = await ensureSchema();
+  if (db.ok) await runDataFixes();
 
   // Non-owner accounts see their own business name in the header instead of
   // the Twin Oaks lockup. Never throws — chrome must render even if the

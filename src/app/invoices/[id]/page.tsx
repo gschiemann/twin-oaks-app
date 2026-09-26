@@ -13,6 +13,7 @@ import {
 } from "@/lib/domain";
 import { periodOf } from "@/lib/sales-tax/format";
 import { allocatePaymentTax } from "@/lib/sales-tax/split";
+import { findTaxHeldInIncome } from "@/lib/income-tax-fix";
 import {
   Card,
   Chip,
@@ -99,8 +100,8 @@ export default async function InvoiceDetailPage({
     !isQuote &&
     invoice.status !== "CANCELLED" &&
     (!taxLocation || invoice.lines.some((l) => l.productType === "UNCLASSIFIED"));
-  // Each payment's sales tax share (recording order), and whether its income
-  // row still holds that tax — payments booked before the split do.
+  // Each payment's sales tax share (recording order), and which payments'
+  // income rows still hold that tax — ones booked before the split do.
   const recorded = [...invoice.payments].sort(
     (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
   );
@@ -110,21 +111,10 @@ export default async function InvoiceDetailPage({
     recorded.map((p) => p.amountCents),
   );
   const taxShareOf = new Map(recorded.map((p, i) => [p.id, shares[i]]));
-  const incomeIds = invoice.payments.map((p) => p.incomeId).filter((v): v is string => !!v);
-  const incomes = incomeIds.length
-    ? await prisma.income.findMany({
-        where: { accountId, id: { in: incomeIds } },
-        select: { id: true, amountCents: true },
-      })
-    : [];
-  const incomeById = new Map(incomes.map((i) => [i.id, i]));
-  const taxInIncome = (p: (typeof invoice.payments)[number]): number => {
-    const inc = p.incomeId ? incomeById.get(p.incomeId) : undefined;
-    const share = taxShareOf.get(p.id) ?? 0;
-    return inc && share > 0 && inc.amountCents >= p.amountCents ? share : 0;
-  };
-  const fixing = fix ? invoice.payments.find((p) => p.id === fix && taxInIncome(p) > 0) : undefined;
-  const fixingIncome = fixing?.incomeId ? incomeById.get(fixing.incomeId) : undefined;
+  const held = new Map(
+    (isQuote ? [] : await findTaxHeldInIncome(accountId, invoice.id)).map((h) => [h.paymentId, h]),
+  );
+  const fixing = fix ? held.get(fix) : undefined;
   const acceptedInvoice = invoice.convertedToInvoiceId
     ? await prisma.invoice.findFirst({
         where: { id: invoice.convertedToInvoiceId, accountId },
@@ -152,18 +142,18 @@ export default async function InvoiceDetailPage({
 
       {saved === "income-tax" ? <SavedBanner title="Sales tax taken out of income." /> : null}
 
-      {fixing && fixingIncome ? (
+      {fixing ? (
         <Card className="mb-4 border-2 border-amber-300 bg-amber-50">
           <p className="text-base font-semibold text-amber-900">
-            Take {formatCents(taxInIncome(fixing))} sales tax out of this income?
+            Take {formatCents(fixing.taxCents)} sales tax out of this income?
           </p>
           <p className="mt-1 text-sm tabular-nums text-amber-900">
-            {formatCents(fixingIncome.amountCents)} →{" "}
-            {formatCents(fixingIncome.amountCents - taxInIncome(fixing))}
+            {formatCents(fixing.income.amountCents)} →{" "}
+            {formatCents(fixing.income.amountCents - fixing.taxCents)}
           </p>
           <div className="mt-3 flex gap-2">
             <form action={removeTaxFromIncome} className="flex-1">
-              <input type="hidden" name="paymentId" value={fixing.id} />
+              <input type="hidden" name="paymentId" value={fixing.paymentId} />
               <button type="submit" className={`${btnPrimaryCls} w-full`}>
                 Take it out
               </button>
@@ -338,12 +328,12 @@ export default async function InvoiceDetailPage({
                       ? ` · incl. ${formatCents(taxShareOf.get(p.id) ?? 0)} sales tax`
                       : ""}
                   </div>
-                  {taxInIncome(p) > 0 ? (
+                  {held.has(p.id) ? (
                     <Link
                       href={`/invoices/${invoice.id}?fix=${p.id}`}
                       className="mt-0.5 block text-sm font-medium text-amber-800"
                     >
-                      Income includes {formatCents(taxInIncome(p))} tax ·{" "}
+                      Income includes {formatCents(held.get(p.id)?.taxCents ?? 0)} tax ·{" "}
                       <span className="underline">Fix</span>
                     </Link>
                   ) : null}

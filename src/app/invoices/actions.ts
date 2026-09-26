@@ -3,12 +3,13 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
-import { formatDate, parseDateInput, taxYearOf } from "@/lib/dates";
+import { parseDateInput, taxYearOf } from "@/lib/dates";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
 import { ALL_DIVISIONS, PRODUCT_TYPES, TAX_TREATMENTS_SALES } from "@/lib/domain";
 import { computeTax, isExempt, rateForCustomer } from "@/lib/tax";
 import { getBusinessProfile, snapshotBusiness } from "@/lib/business";
-import { allocatePaymentTax, taxShareOfNextPayment } from "@/lib/sales-tax/split";
+import { taxShareOfNextPayment } from "@/lib/sales-tax/split";
+import { findTaxHeldInIncome, takeTaxOut } from "@/lib/income-tax-fix";
 import { incomeCategoryForDivision } from "./invoice-bits";
 
 function str(v: FormDataEntryValue | null): string | null {
@@ -438,45 +439,14 @@ export async function removeTaxFromIncome(formData: FormData) {
   const payment = paymentId
     ? await prisma.payment.findFirst({
         where: { id: paymentId, accountId },
-        include: {
-          invoice: {
-            select: {
-              id: true,
-              accountId: true,
-              totalCents: true,
-              salesTaxCents: true,
-              payments: {
-                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-                select: { id: true, amountCents: true },
-              },
-            },
-          },
-        },
+        select: { id: true, invoiceId: true },
       })
     : null;
-  if (!payment || payment.invoice.accountId !== accountId) redirect("/invoices");
-  const back = `/invoices/${payment.invoice.id}`;
-  const income = payment.incomeId
-    ? await prisma.income.findFirst({ where: { id: payment.incomeId, accountId } })
-    : null;
-  if (!income) redirect(`${back}#payments`);
-
-  const shares = allocatePaymentTax(
-    payment.invoice.totalCents,
-    payment.invoice.salesTaxCents,
-    payment.invoice.payments.map((p) => p.amountCents),
-  );
-  const share = shares[payment.invoice.payments.findIndex((p) => p.id === payment.id)] ?? 0;
+  if (!payment) redirect("/invoices");
   // Only while the row still holds the tax, so a second tap changes nothing.
-  if (share > 0 && income.amountCents >= payment.amountCents) {
-    const note = `${formatCents(share)} sales tax taken out ${formatDate(new Date())} — owed to the state.`;
-    await prisma.income.updateMany({
-      where: { id: income.id, accountId },
-      data: {
-        amountCents: income.amountCents - share,
-        notes: income.notes ? `${income.notes}\n${note}` : note,
-      },
-    });
-  }
-  redirect(`${back}?saved=income-tax#payments`);
+  const held = (await findTaxHeldInIncome(accountId, payment.invoiceId)).filter(
+    (h) => h.paymentId === payment.id,
+  );
+  await takeTaxOut(accountId, held);
+  redirect(`/invoices/${payment.invoiceId}?saved=income-tax#payments`);
 }
