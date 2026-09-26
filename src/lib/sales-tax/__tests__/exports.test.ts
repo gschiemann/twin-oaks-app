@@ -337,7 +337,7 @@ test("xlsx: a complete, well-formed package with the five sheets", () => {
   for (const [name, xml] of Object.entries(b.parts)) assertWellFormed(xml, name);
   // Filters + frozen headers on the detail sheets.
   assert.match(b.parts["xl/worksheets/sheet2.xml"], /<autoFilter ref="A1:V4"\/>/);
-  assert.match(b.parts["xl/worksheets/sheet3.xml"], /<autoFilter ref="A1:V7"\/>/);
+  assert.match(b.parts["xl/worksheets/sheet3.xml"], /<autoFilter ref="A1:W7"\/>/);
   assert.match(b.parts["xl/worksheets/sheet3.xml"], /state="frozen"/);
   assert.match(b.parts["xl/workbook.xml"], /_xlnm\._FilterDatabase/);
 });
@@ -350,12 +350,14 @@ test("xlsx: acceptance figures on the Summary, and every formula re-proves them"
   const state = rowWith(b, S, "B", "State of Alabama");
   const county = rowWith(b, S, "B", "Example County");
   assert.deepEqual(
-    ["E", "F", "H", "I", "J", "K", "L", "M", "N"].map((c) => val(b, S, `${c}${state}`)),
-    ["SS", "OTHER", 750, 175, 575, 23, 23, 0, 3],
+    ["E", "F", "H", "I", "J", "K", "L", "M", "N", "O", "P"].map((c) => val(b, S, `${c}${state}`)),
+    ["SS", "OTHER", 750, 175, 575, 23, 23, 0, 0, 23, 3],
   );
   assert.deepEqual(
-    ["D", "E", "F", "H", "I", "J", "K", "L", "M", "N"].map((c) => val(b, S, `${c}${county}`)),
-    ["9999", "ST", "GENER", 750, 175, 575, 11.5, 11.5, 0, 3],
+    ["D", "E", "F", "H", "I", "J", "K", "L", "M", "N", "O", "P"].map((c) =>
+      val(b, S, `${c}${county}`),
+    ),
+    ["9999", "ST", "GENER", 750, 175, 575, 11.5, 11.5, 0, 0, 11.5, 3],
   );
   assert.equal(val(b, S, `G${state}`), 0.04);
   assert.equal(val(b, S, `G${county}`), 0.02);

@@ -64,6 +64,13 @@ function assertInvariants(r: EngineResult) {
     assert.ok(!Object.is(v, -0), "no negative zero in money data");
   }
   assert.equal(r.readyToFile, r.blockers.length === 0);
+  // What's paid: tax due plus any over-collected tax, per row and in total.
+  for (const row of r.summary) {
+    assert.ok(row.overCollectedCents >= 0);
+    assert.equal(row.payCents, row.expectedTaxCents + row.overCollectedCents);
+  }
+  assert.equal(sum(r.summary.map((s) => s.overCollectedCents)), r.totals.overCollectedCents);
+  assert.equal(r.totals.payCents, r.totals.expectedTaxCents + r.totals.overCollectedCents);
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(r)), "result must be plain JSON");
 }
 
@@ -405,7 +412,7 @@ test("quotes, drafts and cancelled invoices never create taxable sales", () => {
   assert.ok(!r.excluded.some((e) => e.label === "Q-001"));
 });
 
-test("tax collected differing from the authority components beyond rounding blocks filing", () => {
+test("over- or under-charged tax is flagged, not blocking; the state gets the larger amount", () => {
   const inv = invoice({
     number: "INV-OV",
     salesTaxCents: 950,
@@ -413,11 +420,35 @@ test("tax collected differing from the authority components beyond rounding bloc
   });
   const r = computeSalesTax(baseInput({ invoices: [inv] }));
   assertInvariants(r);
-  assert.ok(r.blockers.some((b) => b.code === "TAX_MISMATCH"));
-  // The over-collection is visible, not hidden.
+  // Ala. Code §40-23-26(d): over-collected tax must be paid to the state.
+  assert.deepEqual(r.blockers, []);
+  assert.ok(
+    r.warnings.some((w) => w.code === "TAX_OVERCOLLECTED" && /\$3\.50 more/.test(w.message)),
+  );
+  assert.equal(r.readyToFile, true);
   assert.equal(r.totals.collectedTaxCents, 950);
   assert.equal(r.totals.expectedTaxCents, 600);
   assert.equal(r.totals.differenceCents, 350);
+  assert.equal(r.totals.overCollectedCents, 350);
+  assert.equal(r.totals.payCents, 950, "pay the $6.00 due plus the $3.50 over-collected");
+
+  // Charging LESS than due: the seller still owes the full tax (§40-23-2).
+  const under = computeSalesTax(
+    baseInput({
+      invoices: [
+        invoice({ number: "INV-UN", salesTaxCents: 300, lines: [line({ totalCents: 10_000 })] }),
+      ],
+    }),
+  );
+  assertInvariants(under);
+  assert.deepEqual(under.blockers, []);
+  assert.ok(
+    under.warnings.some(
+      (w) => w.code === "TAX_UNDERCOLLECTED" && /\$3\.00 short is still owed/.test(w.message),
+    ),
+  );
+  assert.equal(under.totals.overCollectedCents, 0);
+  assert.equal(under.totals.payCents, 600);
 });
 
 test("a 1¢ rounding difference is a documented adjustment, not a blocker", () => {
@@ -757,7 +788,9 @@ test("migration findings: Aug invoices paid in Sept, design line, 9.5% vs 9% —
   assertInvariants(aug);
   assert.equal(aug.salesLines.length, 3);
   assert.ok(aug.blockers.some((b) => b.code === "NEEDS_DECISION" && /Design/.test(b.message)));
-  assert.ok(aug.blockers.some((b) => b.code === "TAX_MISMATCH" && /INV-004/.test(b.message)));
+  // INV-004's 9.5% on a 9% location: the extra is paid to the state.
+  assert.ok(aug.warnings.some((w) => w.code === "TAX_OVERCOLLECTED" && /INV-004/.test(w.message)));
+  assert.equal(aug.totals.overCollectedCents, 50);
   // Payment-date basis: they are SEPTEMBER sales. Same lines, never both.
   const sep = computeSalesTax(baseInput({ ...input, basis: "PAYMENT_DATE", period: "2026-09" }));
   assert.equal(sep.salesLines.length, 3);

@@ -62,6 +62,7 @@ export const TAX_COMPONENTS_COLUMNS = [
   "tax_treatment",
   "evidence_document_id",
   "invoice_id",
+  "over_collected",
 ] as const;
 
 // A BOM so Excel opens the file as UTF-8 (customer names and descriptions
@@ -129,6 +130,7 @@ export function taxComponentsCsv(r: EngineResult): string {
       c.taxTreatment,
       c.evidenceDocumentId,
       c.invoiceNumber,
+      centsToDecimal(c.overCollectedCents ?? 0),
     ]),
   );
 }

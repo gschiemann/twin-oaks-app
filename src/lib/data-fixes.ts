@@ -6,7 +6,9 @@
 import { prisma } from "@/lib/db";
 import { OWNER_ACCOUNT_ID } from "@/lib/session";
 import { profileRowSeed } from "@/lib/business";
+import type { ProductType } from "@/lib/domain";
 import { findTaxHeldInIncome, takeTaxOut } from "@/lib/income-tax-fix";
+import { guessKinds } from "@/lib/sales-tax/classify";
 import { TAX_TAKEN_OUT } from "@/lib/sales-tax/income-fix";
 
 declare global {
@@ -182,8 +184,150 @@ async function ownerSalesTaxSetup(): Promise<void> {
   }
 }
 
+/** The owner asked Claude to make these calls; each rule says so. */
+const DECIDED_BY = "Claude, for Greg";
+
+const SALE_OF_GOODS =
+  "A retail sale of tangible personal property — taxable (Ala. Code §40-23-2(1)).";
+
+const RULES: {
+  productType: ProductType;
+  treatment: "TAXABLE" | "EXEMPT";
+  exemptionReason?: string;
+  notes: string;
+}[] = [
+  { productType: "PRINTED_PART", treatment: "TAXABLE", notes: SALE_OF_GOODS },
+  { productType: "OTHER_GOODS", treatment: "TAXABLE", notes: SALE_OF_GOODS },
+  {
+    productType: "LIVE_LIVESTOCK",
+    treatment: "EXEMPT",
+    exemptionReason: "Livestock — no Alabama sales tax (ALDOR: sales where no sales tax is due)",
+    notes: "Meat, wool and other products made from the animals are not livestock.",
+  },
+  {
+    productType: "DESIGN_WITH_PRODUCT",
+    treatment: "TAXABLE",
+    notes:
+      "Design that goes into a product sold is part of its price: gross proceeds include labor and service costs (Ala. Code §40-23-1), and ALDOR doesn't exempt fabrication labor.",
+  },
+  {
+    productType: "DESIGN_STANDALONE",
+    treatment: "EXEMPT",
+    exemptionReason: "Design service, no product sold — not a sale of tangible personal property",
+    notes: "If a product is made from the design and sold, it's Design (part of a product).",
+  },
+  {
+    productType: "FABRICATION_LABOR",
+    treatment: "TAXABLE",
+    notes:
+      "Labor to make what's sold is part of its price (Ala. Code §40-23-1); ALDOR doesn't exempt fabrication labor.",
+  },
+  {
+    productType: "REPAIR_LABOR",
+    treatment: "EXEMPT",
+    exemptionReason: "Repair or installation labor billed as its own line — exempt (ALDOR)",
+    notes: "Parts used are still taxable — bill them on their own line.",
+  },
+  {
+    productType: "SERVICE",
+    treatment: "EXEMPT",
+    exemptionReason: "Service, no product sold — not subject to Alabama sales tax",
+    notes: "",
+  },
+  {
+    productType: "SHIPPING",
+    treatment: "TAXABLE",
+    notes:
+      "Delivery in our own vehicle is taxable even when billed separately (Ala. Admin. Code r. 810-6-1-.178). Shipping by a carrier (USPS, UPS, FedEx) billed separately isn't — mark those lines Exempt.",
+  },
+];
+
+// 2026-09-26, the owner: "do what's right" — decide what's taxable under
+// Alabama law, with the source on each rule, and sort the older invoice
+// lines whose wording leaves no doubt (src/lib/sales-tax/classify.ts). The
+// rest stay "Not classified" for a person. Once only: skipped when a rule it
+// made exists. Rules set in the app are kept, and only lines still not
+// classified are touched.
+async function ownerTaxRules(): Promise<void> {
+  const A = OWNER_ACCOUNT_ID;
+  const done = await prisma.$transaction(
+    async (tx) => {
+      if (await tx.salesTaxRule.count({ where: { accountId: A, approvedBy: DECIDED_BY } }))
+        return null;
+      const now = new Date();
+      const rules = await tx.salesTaxRule.createMany({
+        data: RULES.map((r) => ({
+          accountId: A,
+          productType: r.productType,
+          treatment: r.treatment,
+          rateClass: "GENERAL",
+          exemptionReason: r.exemptionReason ?? null,
+          requiresEvidence: false,
+          approvedBy: DECIDED_BY,
+          approvedAt: now,
+          notes: r.notes || null,
+        })),
+        skipDuplicates: true,
+      });
+
+      const invoices = await tx.invoice.findMany({
+        where: { accountId: A, kind: "INVOICE", lines: { some: { productType: "UNCLASSIFIED" } } },
+        select: {
+          division: true,
+          lines: { select: { id: true, description: true, totalCents: true, productType: true } },
+        },
+      });
+      const groups = new Map<
+        string,
+        { productType: ProductType; reason?: string; ids: string[] }
+      >();
+      let open = 0;
+      for (const inv of invoices) {
+        const guesses = guessKinds(inv.lines, inv.division);
+        inv.lines.forEach((l, i) => {
+          if (l.productType !== "UNCLASSIFIED") return;
+          open += 1;
+          const g = guesses[i];
+          if (!g) return;
+          const key = `${g.productType}|${g.exemptReason ?? ""}`;
+          const group = groups.get(key) ?? {
+            productType: g.productType,
+            reason: g.exemptReason,
+            ids: [],
+          };
+          group.ids.push(l.id);
+          groups.set(key, group);
+        });
+      }
+      let sorted = 0;
+      for (const g of groups.values()) {
+        const res = await tx.invoiceLine.updateMany({
+          where: {
+            id: { in: g.ids },
+            productType: "UNCLASSIFIED",
+            invoice: { accountId: A },
+            ...(g.reason ? { taxTreatmentOverride: null } : {}),
+          },
+          data: {
+            productType: g.productType,
+            ...(g.reason ? { taxTreatmentOverride: "EXEMPT", exemptionReason: g.reason } : {}),
+          },
+        });
+        sorted += res.count;
+      }
+      return { rules: rules.count, sorted, open };
+    },
+    { isolationLevel: "Serializable", maxWait: 10_000, timeout: 30_000 },
+  );
+  if (done) {
+    console.log(
+      `[twin-oaks] data fix: ${done.rules} sales tax rules; sorted ${done.sorted} of ${done.open} unclassified invoice lines`,
+    );
+  }
+}
+
 async function runFixes(): Promise<void> {
-  for (const fix of [ownerIncomeTax, ownerSalesTaxSetup]) {
+  for (const fix of [ownerIncomeTax, ownerSalesTaxSetup, ownerTaxRules]) {
     try {
       await fix();
     } catch (e) {

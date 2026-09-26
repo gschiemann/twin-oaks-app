@@ -269,12 +269,21 @@ export default async function SalesTaxMonthPage({
 
       <div className="mb-4 grid grid-cols-3 gap-2">
         <StatCard label="Sales" value={formatCents(r.totals.grossSalesCents)} sub="counted once" />
-        <StatCard label="Tax due" value={formatCents(r.totals.expectedTaxCents)} />
+        <StatCard
+          label="To pay"
+          value={formatCents(r.totals.payCents)}
+          sub={
+            r.totals.overCollectedCents > 0
+              ? `incl. ${formatCents(r.totals.overCollectedCents)} over-collected`
+              : undefined
+          }
+        />
         <StatCard
           label="Collected"
           value={formatCents(r.totals.collectedTaxCents + r.totals.unallocatedCollectedCents)}
           tone={
-            r.totals.differenceCents === 0 && r.totals.unallocatedCollectedCents === 0
+            r.totals.differenceCents === r.totals.overCollectedCents &&
+            r.totals.unallocatedCollectedCents === 0
               ? "stone"
               : "red"
           }
@@ -303,7 +312,7 @@ export default async function SalesTaxMonthPage({
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="font-medium text-stone-900">{s.authority}</span>
                     <span className="font-semibold tabular-nums text-stone-900">
-                      {formatCents(s.expectedTaxCents)}
+                      {formatCents(s.payCents)}
                     </span>
                   </div>
                   <div className="text-xs text-stone-500">
@@ -320,6 +329,12 @@ export default async function SalesTaxMonthPage({
                     <Money label="Tax due" cents={s.expectedTaxCents} strong />
                     <Money label="Collected" cents={s.collectedTaxCents} />
                     <Money label="Difference" cents={s.differenceCents} />
+                    {s.overCollectedCents > 0 ? (
+                      <>
+                        <Money label="Over-collected" cents={s.overCollectedCents} />
+                        <Money label="To pay" cents={s.payCents} strong />
+                      </>
+                    ) : null}
                   </dl>
                 </summary>
                 {comps.length === 0 ? (
@@ -361,9 +376,16 @@ export default async function SalesTaxMonthPage({
           })
         )}
         <div className="mt-2 flex justify-between border-t border-stone-200 pt-2 text-sm font-semibold text-stone-900">
-          <span>Total tax, all authorities</span>
-          <span className="tabular-nums">{formatCents(r.totals.expectedTaxCents)}</span>
+          <span>To pay, all authorities</span>
+          <span className="tabular-nums">{formatCents(r.totals.payCents)}</span>
         </div>
+        {r.totals.overCollectedCents > 0 ? (
+          <p className="mt-1 text-xs text-stone-500">
+            Tax due {formatCents(r.totals.expectedTaxCents)} + over-collected{" "}
+            {formatCents(r.totals.overCollectedCents)} (goes on the return&apos;s over-collected
+            line).
+          </p>
+        ) : null}
         <p className="mt-1 text-xs text-stone-500">
           Every authority taxes the same sales — never add gross across rows.
         </p>

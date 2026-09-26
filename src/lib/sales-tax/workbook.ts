@@ -169,6 +169,8 @@ export function salesTaxWorkbook(r: EngineResult, meta: WorkbookMeta): Uint8Arra
     { header: "Tax due", width: 11, cell: (c) => money(c.expectedTaxCents) },
     { header: "Tax collected", width: 12, cell: (c) => money(c.collectedTaxCents) },
     { header: "Difference", width: 11, cell: (c) => money(c.differenceCents) },
+    // Snapshots saved before this column existed read as 0.
+    { header: "Over-collected", width: 12, cell: (c) => money(c.overCollectedCents ?? 0) },
     { header: "Treatment", width: 17, cell: (c) => t(treatmentLabel(c.taxTreatment)) },
     { header: "Exemption reason", width: 34, cell: (c) => t(c.exemptionReason) },
     { header: "Evidence document", width: 26, cell: (c) => t(c.evidenceDocumentId, "code") },
@@ -206,6 +208,8 @@ export function salesTaxWorkbook(r: EngineResult, meta: WorkbookMeta): Uint8Arra
     "Tax due",
     "Tax collected",
     "Difference",
+    "Over-collected",
+    "To pay",
     "Sale lines",
   ];
   const S = (header: string) => colName(summaryHeaders.indexOf(header) + 1);
@@ -249,6 +253,16 @@ export function salesTaxWorkbook(r: EngineResult, meta: WorkbookMeta): Uint8Arra
         "money",
       ),
       fx(`${S("Tax collected")}${R}-${S("Tax due")}${R}`, s.differenceCents / 100, "money"),
+      fx(
+        `SUMIFS(${C("Over-collected")},${C("Filing row")},${key})`,
+        (s.overCollectedCents ?? 0) / 100,
+        "money",
+      ),
+      fx(
+        `${S("Tax due")}${R}+${S("Over-collected")}${R}`,
+        (s.expectedTaxCents + (s.overCollectedCents ?? 0)) / 100,
+        "money",
+      ),
       fx(`COUNTIFS(${C("Filing row")},${key})`, s.componentCount, "int"),
     ]);
   });
@@ -275,6 +289,12 @@ export function salesTaxWorkbook(r: EngineResult, meta: WorkbookMeta): Uint8Arra
         "moneyTotal",
       )
     : money(r.totals.differenceCents, "moneyTotal");
+  const over = r.totals.overCollectedCents ?? 0;
+  totalCells[summaryHeaders.indexOf("Over-collected")] = sumCol(S("Over-collected"), over);
+  totalCells[summaryHeaders.indexOf("To pay")] = sumCol(
+    S("To pay"),
+    r.totals.expectedTaxCents + over,
+  );
   rows.push(totalCells);
   rows.push([
     null,
@@ -320,6 +340,14 @@ export function salesTaxWorkbook(r: EngineResult, meta: WorkbookMeta): Uint8Arra
       "money",
     ),
   );
+  check(
+    "Over-collected — paid to the state (Ala. Code §40-23-26(d))",
+    fx(`${S("Over-collected")}${totalRow}`, over / 100, "money"),
+  );
+  check(
+    "To pay, all authorities",
+    fx(`${S("To pay")}${totalRow}`, (r.totals.expectedTaxCents + over) / 100, "money"),
+  );
   let unallocatedRef = "";
   if (r.totals.unallocatedCollectedCents !== 0) {
     const u = check(
@@ -338,7 +366,7 @@ export function salesTaxWorkbook(r: EngineResult, meta: WorkbookMeta): Uint8Arra
   const summarySheet: SheetSpec = {
     name: SHEET.summary,
     rows,
-    widths: [8, 28, 12, 11, 8, 11, 9, 13, 13, 13, 12, 13, 12, 9],
+    widths: [8, 28, 12, 11, 8, 11, 9, 13, 13, 13, 12, 13, 12, 13, 12, 9],
   };
 
   // ————————————————————— Review —————————————————————
@@ -397,6 +425,7 @@ export function salesTaxWorkbook(r: EngineResult, meta: WorkbookMeta): Uint8Arra
     `Sales tax workpaper for ${periodLabel(r.period)}${meta.businessName ? ` — ${meta.businessName}` : ""}.`,
     "It is not a return and not a My Alabama Taxes upload file. Enter the Summary figures on each return yourself and check them against the fields the return shows.",
     "Summary: one row per taxing authority and rate type. Every authority taxes the same sales, so gross, deductions and taxable repeat on each row — never add them across rows. Tax is the only figure that adds across authorities.",
+    "Over-collected: tax charged above what was due. Alabama law says it is paid to the state (Ala. Code §40-23-26(d)) — it goes on the return's \"amounts over-collected\" line. To pay = tax due + over-collected. Tax charged below what was due is still owed in full (Ala. Code §40-23-2).",
     "Sales lines: every sale line in the month, counted once. Tax collected is each line's share of the tax on its invoice.",
     'Tax components: one row per sale line per authority. Filter "Filing row" to see exactly what makes up a Summary row.',
     "Review: what blocks filing, what's worth a look, and what was left out of the month.",

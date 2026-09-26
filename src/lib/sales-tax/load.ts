@@ -341,17 +341,24 @@ export async function computeMonth(
   return computeSalesTax(await loadSalesTaxInput(accountId, period, generatedAt));
 }
 
+/** Figures derived from the rest (over-collected from the differences), left
+ *  out so months closed before they existed don't read as changed. */
+const DERIVED = new Set(["overCollectedCents", "payCents"]);
+
 /**
  * What a close commits to: every figure and row, but not when it was
  * computed. Two results with the same fingerprint file the same return.
  */
 export function fingerprint(r: EngineResult): string {
-  return JSON.stringify({
-    basis: r.basis,
-    salesLines: r.salesLines,
-    components: r.components,
-    summary: r.summary,
-    totals: r.totals,
-    excluded: r.excluded,
-  });
+  return JSON.stringify(
+    {
+      basis: r.basis,
+      salesLines: r.salesLines,
+      components: r.components,
+      summary: r.summary,
+      totals: r.totals,
+      excluded: r.excluded,
+    },
+    (k, v: unknown) => (DERIVED.has(k) ? undefined : v),
+  );
 }

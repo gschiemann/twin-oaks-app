@@ -388,6 +388,7 @@ export function computeSalesTax(input: EngineInput): EngineResult {
         expectedTaxCents: expected,
         collectedTaxCents: 0, // allocated per invoice below
         differenceCents: 0,
+        overCollectedCents: 0,
         taxTreatment: r.treatment,
         exemptionReason: r.reason,
         evidenceDocumentId: r.evidence,
@@ -702,7 +703,23 @@ export function computeSalesTax(input: EngineInput): EngineResult {
       });
       const taxableCount = invComponents.filter((c) => c.taxableCents !== 0).length;
       const tolerance = Math.max(1, Math.ceil(taxableCount / 2));
-      if (diff !== 0) {
+      // Tax charged above what's due must be paid to the state — only
+      // rounding up to the cent is exempt (Ala. Code §40-23-26(d)). So an
+      // over-charge isn't a blocker: it's added to what's paid.
+      const overCharged = diff > 0 && (expected === 0 || diff > tolerance);
+      if (overCharged) {
+        invComponents.forEach((c) => {
+          c.overCollectedCents = Math.max(0, c.differenceCents);
+        });
+        issues.warn(
+          "TAX_OVERCOLLECTED",
+          expected === 0
+            ? `${label} charged ${usd(collected)} tax on sales that aren't taxable — it's paid to the state (Ala. Code §40-23-26(d)).`
+            : `${label} charged ${usd(diff)} more tax than due — it's paid to the state (Ala. Code §40-23-26(d)).`,
+          { kind: "INVOICE", id: inv.id },
+        );
+      }
+      if (diff !== 0 && !overCharged) {
         if (expected === 0) {
           issues.block(
             "TAX_ON_EXEMPT",
@@ -713,13 +730,13 @@ export function computeSalesTax(input: EngineInput): EngineResult {
             },
           );
         } else if (Math.abs(diff) > tolerance) {
-          issues.block(
-            "TAX_MISMATCH",
-            `${label} charged ${usd(collected)} tax; the rates say ${usd(expected)}.`,
-            {
-              kind: "INVOICE",
-              id: inv.id,
-            },
+          // Charged less than due: the seller owes the tax on its gross
+          // proceeds whether or not the customer paid it (Ala. Code
+          // §40-23-2), so the full tax due is what's paid.
+          issues.warn(
+            "TAX_UNDERCOLLECTED",
+            `${label} charged ${usd(collected)} tax; ${usd(expected)} is due — the ${usd(-diff)} short is still owed.`,
+            { kind: "INVOICE", id: inv.id },
           );
         } else {
           issues.warn("TAX_ROUNDING", `${label}: ${Math.abs(diff)}¢ rounding difference.`, {
@@ -959,6 +976,8 @@ export function computeSalesTax(input: EngineInput): EngineResult {
         expectedTaxCents: 0,
         collectedTaxCents: 0,
         differenceCents: 0,
+        overCollectedCents: 0,
+        payCents: 0,
         componentCount: 0,
       };
       groups.set(key, row);
@@ -972,6 +991,8 @@ export function computeSalesTax(input: EngineInput): EngineResult {
     row.expectedTaxCents += c.expectedTaxCents;
     row.collectedTaxCents += c.collectedTaxCents;
     row.differenceCents += c.differenceCents;
+    row.overCollectedCents += c.overCollectedCents;
+    row.payCents += c.expectedTaxCents + c.overCollectedCents;
     row.componentCount += 1;
   }
   // Exempt-only rows still show their rate for reference.
@@ -1021,6 +1042,8 @@ export function computeSalesTax(input: EngineInput): EngineResult {
       expectedTaxCents: 0,
       collectedTaxCents: 0,
       differenceCents: 0,
+      overCollectedCents: 0,
+      payCents: 0,
       componentCount: 0,
     });
     if (!general && !input.rates.some((r) => r.authorityId === id)) {
@@ -1061,10 +1084,11 @@ export function computeSalesTax(input: EngineInput): EngineResult {
     0 - salesLines.filter((l) => l.status === "RETURN").reduce((s, l) => s + l.pretaxCents, 0);
   const expectedTaxCents = components.reduce((s, c) => s + c.expectedTaxCents, 0);
   const collectedTaxCents = components.reduce((s, c) => s + c.collectedTaxCents, 0);
+  const overCollectedCents = components.reduce((s, c) => s + c.overCollectedCents, 0);
   const transactionCount = new Set(salesLines.map((l) => l.transactionId)).size;
 
   return {
-    engineVersion: 1,
+    engineVersion: 2,
     period,
     basis,
     basisApprovedBy: input.basisApprovedBy ?? "",
@@ -1081,6 +1105,8 @@ export function computeSalesTax(input: EngineInput): EngineResult {
       expectedTaxCents,
       collectedTaxCents,
       differenceCents: collectedTaxCents - expectedTaxCents,
+      overCollectedCents,
+      payCents: expectedTaxCents + overCollectedCents,
       unallocatedCollectedCents,
       customerTotalCents:
         salesLines.reduce((s, l) => s + l.totalCents, 0) + unallocatedCollectedCents,

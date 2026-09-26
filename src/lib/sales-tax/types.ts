@@ -207,6 +207,8 @@ export type TaxComponent = {
   expectedTaxCents: number;
   collectedTaxCents: number;
   differenceCents: number; // collected - expected
+  /** Tax charged above what's due (not rounding): paid to the state, Ala. Code §40-23-26(d). */
+  overCollectedCents: number;
   taxTreatment: SalesTaxTreatment;
   exemptionReason: string;
   evidenceDocumentId: string;
@@ -229,6 +231,10 @@ export type SummaryRow = {
   expectedTaxCents: number;
   collectedTaxCents: number;
   differenceCents: number;
+  /** Over-collected tax — goes on the return's "amounts over-collected" line. */
+  overCollectedCents: number;
+  /** What to pay this authority: tax due + over-collected. */
+  payCents: number;
   componentCount: number;
 };
 
@@ -268,6 +274,9 @@ export type EngineTotals = {
   differenceCents: number;
   /** Tax collected on invoices that could not be allocated (no location). */
   unallocatedCollectedCents: number;
+  /** Over-collected tax across authorities, and everything to pay (due + over-collected). */
+  overCollectedCents: number;
+  payCents: number;
   /** What customers were charged: sales + tax collected. */
   customerTotalCents: number;
   lineCount: number;
@@ -275,7 +284,8 @@ export type EngineTotals = {
 };
 
 export type EngineResult = {
-  engineVersion: 1;
+  /** 2: over-collected tax is paid, under-collected tax is owed (neither blocks). */
+  engineVersion: number;
   period: string;
   basis: SalesTaxBasis | null;
   basisApprovedBy: string;
