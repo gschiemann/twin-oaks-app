@@ -129,6 +129,11 @@ export type EngineInput = {
   invoices: InvoiceIn[];
   livestockSales: LivestockSaleIn[];
   incomes: IncomeIn[];
+  /**
+   * Authorities the business files with — those on a location that has had
+   * a sale by the end of the period. Omitted: every location's authorities.
+   */
+  filingAuthorityIds?: string[];
   /** When the result is produced — injected so results are reproducible. */
   generatedAt: Date;
 };

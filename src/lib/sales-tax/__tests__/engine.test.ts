@@ -610,6 +610,40 @@ test("income posted net of its tax share is not flagged; full-amount income stil
   assert.ok(!gone.warnings.some((x) => x.code === "INCOME_INCLUDES_TAX"));
 });
 
+test("an undecided livestock sale asks for a decision, not for tax", () => {
+  const r = computeSalesTax(
+    baseInput({ rules: [RULES[0]], livestockSales: [livestockSale({ salePriceCents: 17_500 })] }),
+  );
+  assertInvariants(r);
+  assert.ok(r.blockers.some((b) => b.code === "NEEDS_DECISION"));
+  assert.ok(!r.blockers.some((b) => b.code === "LIVESTOCK_UNCOLLECTED"));
+});
+
+test("zero returns only for authorities the business files with", () => {
+  // A Dothan-style location set up for future deliveries: its city tax must
+  // not produce a zero return before the first sale there.
+  const later = { ...CITY_LOCATION, id: "loc-later", authorityIds: [STATE.id, CITY.id] };
+  const input = baseInput({
+    period: "2026-10",
+    authorities: [STATE, COUNTY, CITY],
+    rates: [STATE_4, COUNTY_2, CITY_3],
+    locations: [baseInput().locations[0], later],
+  });
+  const all = computeSalesTax(input);
+  assert.deepEqual(all.summary.map((s) => s.authority).sort(), [
+    "Example City",
+    "Example County",
+    "State of Alabama",
+  ]);
+  const filed = computeSalesTax({ ...input, filingAuthorityIds: [STATE.id, COUNTY.id] });
+  assertInvariants(filed);
+  assert.deepEqual(
+    filed.summary.map((s) => s.authority),
+    ["State of Alabama", "Example County"],
+  );
+  assert.ok(filed.summary.every((s) => s.grossCents === 0 && s.expectedTaxCents === 0));
+});
+
 test("livestock sales: exempt by approved rule, flagged if taxable with nothing collected", () => {
   const sale = livestockSale({ salePriceCents: 17_500 });
   const r = computeSalesTax(baseInput({ livestockSales: [sale] }));

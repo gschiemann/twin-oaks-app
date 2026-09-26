@@ -84,6 +84,31 @@ export async function getBusinessProfile(accountId: string): Promise<BusinessPro
   };
 }
 
+/**
+ * Fields for creating a missing profile row: exactly what the account sees
+ * today (the owner's defaults included), so saving one setting — say, the
+ * sales tax basis — never blanks the business details on documents.
+ */
+export async function profileRowSeed(accountId: string) {
+  const p = await getBusinessProfile(accountId);
+  return {
+    name: p.name,
+    addressLine1: p.addressLine1,
+    addressLine2: p.addressLine2,
+    city: p.city,
+    state: p.state,
+    postalCode: p.postalCode,
+    phone: p.phone,
+    email: p.email,
+    website: p.website,
+    logoPath: p.logoPath,
+    defaultTaxRatePercent: p.defaultTaxRatePercent,
+    // The owner's legacy division trio is stored as null.
+    divisionsCsv: accountId === OWNER_ACCOUNT_ID ? null : p.divisions.join(","),
+    householdCategoriesCsv: p.householdCategoriesCsv,
+  };
+}
+
 // Document logo: the uploaded one, or the Twin Oaks lockup for the owner
 // only. Null = render no logo (a neutral document for other businesses).
 export function brandLogoSrcFor(accountId: string, logoFileSrc: string | null): string | null {

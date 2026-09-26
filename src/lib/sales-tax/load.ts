@@ -86,6 +86,38 @@ export async function loadSalesTaxInput(
     orderBy: { date: "asc" },
   });
 
+  // Who the business files with: authorities on a location that has had a
+  // sale by the end of this month. A location set up for later (say, future
+  // deliveries) adds no zero returns until its first sale.
+  const [usedByInvoices, usedBySales] = await Promise.all([
+    prisma.invoice.findMany({
+      where: {
+        accountId,
+        kind: "INVOICE",
+        status: "SENT",
+        issueDate: { lt: end },
+        taxLocationId: { not: null },
+      },
+      select: { taxLocationId: true },
+      distinct: ["taxLocationId"],
+    }),
+    prisma.livestockSale.findMany({
+      where: { accountId, date: { lt: end }, taxLocationId: { not: null } },
+      select: { taxLocationId: true },
+      distinct: ["taxLocationId"],
+    }),
+  ]);
+  const usedLocations = new Set([...usedByInvoices, ...usedBySales].map((x) => x.taxLocationId));
+  const filingAuthorityIds = usedLocations.size
+    ? [
+        ...new Set(
+          locations
+            .filter((l) => usedLocations.has(l.id))
+            .flatMap((l) => splitIds(l.authorityIdsCsv)),
+        ),
+      ]
+    : undefined; // nothing sold anywhere yet: show every location's authorities
+
   const customerIds = [
     ...new Set([
       ...invoices.map((i) => i.customerId),
@@ -289,6 +321,7 @@ export async function loadSalesTaxInput(
         source: i.source,
         category: i.category,
       })),
+    filingAuthorityIds,
     generatedAt,
   };
 }

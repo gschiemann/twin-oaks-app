@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
+import { profileRowSeed } from "@/lib/business";
 import { parseDateInput } from "@/lib/dates";
 import {
   ALABAMA_STATE_RATE_CODES,
@@ -55,7 +56,10 @@ export async function saveBasis(formData: FormData) {
     select: { id: true },
   });
   if (existing) await prisma.businessProfile.update({ where: { id: existing.id }, data });
-  else await prisma.businessProfile.create({ data: { accountId, ...data } });
+  else
+    await prisma.businessProfile.create({
+      data: { accountId, ...(await profileRowSeed(accountId)), ...data },
+    });
   done("basis", "basis");
 }
 

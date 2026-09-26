@@ -798,7 +798,9 @@ export function computeSalesTax(input: EngineInput): EngineResult {
       c.differenceCents = c.collectedTaxCents - c.expectedTaxCents;
     }
     const due = comps.reduce((s, c) => s + c.expectedTaxCents, 0);
-    if (due !== 0) {
+    // Only once someone has decided it IS taxable — an open decision is
+    // already its own blocker.
+    if (due !== 0 && r.treatment === "TAXABLE") {
       issues.block("LIVESTOCK_UNCOLLECTED", `${label} is taxable but no tax was collected.`, fix);
     }
     components.push(...comps);
@@ -992,10 +994,15 @@ export function computeSalesTax(input: EngineInput): EngineResult {
   }
 
   // A month with no sales still files: every authority the business files
-  // for gets a zero row.
+  // with gets a zero row. A location set up for later (no sale there yet)
+  // doesn't make the business file with its authorities.
   const filedFor = new Set<string>();
-  for (const loc of input.locations)
-    for (const id of loc.authorityIds) if (authorities.has(id)) filedFor.add(id);
+  if (input.filingAuthorityIds) {
+    for (const id of input.filingAuthorityIds) if (authorities.has(id)) filedFor.add(id);
+  } else {
+    for (const loc of input.locations)
+      for (const id of loc.authorityIds) if (authorities.has(id)) filedFor.add(id);
+  }
   for (const id of filedFor) {
     if ([...groups.values()].some((g) => g.authorityId === id)) continue;
     const a = authorities.get(id)!;
