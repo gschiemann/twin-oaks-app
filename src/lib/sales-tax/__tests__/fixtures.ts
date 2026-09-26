@@ -131,7 +131,15 @@ export function payment(
   incomeId: string | null = null,
 ): PaymentIn {
   seq += 1;
-  return { id: `pay-${seq}`, date: day(iso), amountCents, incomeId };
+  // Income posted for the full payment — the way payments were booked before
+  // the tax share was split out. Override incomeAmountCents to model newer ones.
+  return {
+    id: `pay-${seq}`,
+    date: day(iso),
+    amountCents,
+    incomeId,
+    incomeAmountCents: incomeId ? amountCents : null,
+  };
 }
 
 /**

@@ -585,6 +585,31 @@ test("same amount from a different payer is a coincidence, not a duplicate — b
   assert.ok(!misc.warnings.some((w) => w.code === "INCOME_NOT_A_SALE"));
 });
 
+test("income posted net of its tax share is not flagged; full-amount income still is", () => {
+  const inv = acceptanceInvoice(); // $784.50 incl. $34.50 tax
+  // Paid in full, income posted at the pre-tax $750.00 (how payments book now).
+  inv.payments = [{ ...payment("2026-09-12", 78_450, "inc-net"), incomeAmountCents: 75_000 }];
+  const net = computeSalesTax(baseInput({ invoices: [inv] }));
+  assertInvariants(net);
+  assert.ok(!net.warnings.some((w) => w.code === "INCOME_INCLUDES_TAX"));
+
+  // Two partial payments: the first booked the old way (whole amount), the
+  // second net. Only the first one's share is still sitting in income.
+  inv.payments = [
+    payment("2026-09-12", 30_000, "inc-old"), // income 300.00 — tax share 13.19
+    { ...payment("2026-09-20", 48_450, "inc-new"), incomeAmountCents: 48_450 - 2_131 },
+  ];
+  const mixed = computeSalesTax(baseInput({ invoices: [inv] }));
+  const w = mixed.warnings.filter((x) => x.code === "INCOME_INCLUDES_TAX");
+  assert.equal(w.length, 1);
+  assert.match(w[0].message, /includes \$13\.19 sales tax/);
+
+  // A payment whose income row is gone has nothing to fix.
+  inv.payments = [{ ...payment("2026-09-12", 78_450, "inc-deleted"), incomeAmountCents: null }];
+  const gone = computeSalesTax(baseInput({ invoices: [inv] }));
+  assert.ok(!gone.warnings.some((x) => x.code === "INCOME_INCLUDES_TAX"));
+});
+
 test("livestock sales: exempt by approved rule, flagged if taxable with nothing collected", () => {
   const sale = livestockSale({ salePriceCents: 17_500 });
   const r = computeSalesTax(baseInput({ livestockSales: [sale] }));

@@ -64,11 +64,14 @@ export type InvoiceLineIn = {
   originalLineId: string | null;
 };
 
+/** Payments in RECORDING order — the order tax is allocated to them in. */
 export type PaymentIn = {
   id: string;
   date: Date;
   amountCents: number;
   incomeId: string | null;
+  /** The linked Income row's amount (null when there is none). */
+  incomeAmountCents: number | null;
 };
 
 export type InvoiceIn = {

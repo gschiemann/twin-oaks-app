@@ -19,7 +19,8 @@ export function asBasis(v: string | null | undefined): SalesTaxBasis | null {
 
 const invoiceInclude = {
   lines: { orderBy: { sortOrder: "asc" as const } },
-  payments: { orderBy: { date: "asc" as const } },
+  // Recording order: sales tax is allocated to payments in this order.
+  payments: { orderBy: [{ createdAt: "asc" as const }, { id: "asc" as const }] },
   customer: { select: { name: true, taxTreatment: true, taxExemptReason: true } },
 };
 
@@ -100,7 +101,10 @@ export async function loadSalesTaxInput(
     ),
   ];
 
-  const [customerDocs, animalDocs, evidenceDocs, saleCustomers, animals, incomes] =
+  const paymentIncomeIds = invoices.flatMap((i) =>
+    i.payments.map((p) => p.incomeId).filter((id): id is string => !!id),
+  );
+  const [customerDocs, animalDocs, evidenceDocs, saleCustomers, animals, incomes, paymentIncomes] =
     await Promise.all([
       prisma.document.findMany({
         where: { accountId, ownerType: "CUSTOMER", ownerId: { in: customerIds } },
@@ -135,7 +139,14 @@ export async function loadSalesTaxInput(
           category: true,
         },
       }),
+      paymentIncomeIds.length
+        ? prisma.income.findMany({
+            where: { accountId, id: { in: paymentIncomeIds } },
+            select: { id: true, amountCents: true },
+          })
+        : [],
     ]);
+  const incomeAmount = new Map(paymentIncomes.map((i) => [i.id, i.amountCents]));
 
   // Income the app posted itself (from an invoice payment or a livestock
   // sale) is not a separate sale — only independent entries are checked for
@@ -247,6 +258,7 @@ export async function loadSalesTaxInput(
           date: p.date,
           amountCents: p.amountCents,
           incomeId: p.incomeId,
+          incomeAmountCents: p.incomeId ? (incomeAmount.get(p.incomeId) ?? null) : null,
         })),
       }),
     ),

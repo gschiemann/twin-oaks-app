@@ -3,11 +3,12 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
-import { parseDateInput, taxYearOf } from "@/lib/dates";
+import { formatDate, parseDateInput, taxYearOf } from "@/lib/dates";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
 import { ALL_DIVISIONS, PRODUCT_TYPES, TAX_TREATMENTS_SALES } from "@/lib/domain";
 import { computeTax, isExempt, rateForCustomer } from "@/lib/tax";
 import { getBusinessProfile, snapshotBusiness } from "@/lib/business";
+import { allocatePaymentTax, taxShareOfNextPayment } from "@/lib/sales-tax/split";
 import { incomeCategoryForDivision } from "./invoice-bits";
 
 function str(v: FormDataEntryValue | null): string | null {
@@ -80,16 +81,22 @@ async function scopeLineRefs(accountId: string, lines: ParsedLine[]): Promise<Pa
       ? prisma.document.findMany({ where: { accountId, id: { in: docIds } }, select: { id: true } })
       : [],
     lineIds.length
-      ? prisma.invoiceLine.findMany({ where: { id: { in: lineIds }, invoice: { accountId } }, select: { id: true } })
+      ? prisma.invoiceLine.findMany({
+          where: { id: { in: lineIds }, invoice: { accountId } },
+          select: { id: true },
+        })
       : [],
   ]);
   const okDocs = new Set(docs.map((d) => d.id));
   const okLines = new Set(originals.map((l) => l.id));
   return lines.map((l) => ({
     ...l,
-    evidenceDocumentId: l.evidenceDocumentId && okDocs.has(l.evidenceDocumentId) ? l.evidenceDocumentId : null,
+    evidenceDocumentId:
+      l.evidenceDocumentId && okDocs.has(l.evidenceDocumentId) ? l.evidenceDocumentId : null,
     originalLineId:
-      l.productType === "REFUND" && l.originalLineId && okLines.has(l.originalLineId) ? l.originalLineId : null,
+      l.productType === "REFUND" && l.originalLineId && okLines.has(l.originalLineId)
+        ? l.originalLineId
+        : null,
   }));
 }
 
@@ -129,7 +136,10 @@ async function invoiceCoreFromForm(accountId: string, formData: FormData) {
   // Where the sale is taxed — only ever one of this account's locations.
   const locationId = str(formData.get("taxLocationId"));
   const location = locationId
-    ? await prisma.taxLocation.findFirst({ where: { id: locationId, accountId }, select: { id: true } })
+    ? await prisma.taxLocation.findFirst({
+        where: { id: locationId, accountId },
+        select: { id: true },
+      })
     : null;
 
   return {
@@ -319,6 +329,8 @@ export async function deleteInvoice(formData: FormData) {
 
 // Recording a payment puts it on the books automatically: an Income row is
 // created (division-appropriate category) and linked — no double entry.
+// Only the pre-tax share is income: the sales tax in a payment is owed to
+// the state (allocated in recording order — see src/lib/sales-tax/split.ts).
 export async function recordPayment(formData: FormData) {
   const accountId = await requireAccountId();
   const invoiceId = str(formData.get("invoiceId"));
@@ -339,14 +351,29 @@ export async function recordPayment(formData: FormData) {
   const date = parseDateInput(formData.get("date")) ?? new Date();
   const method = str(formData.get("method"));
 
+  const prior = await prisma.payment.findMany({
+    where: { invoiceId, accountId },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { amountCents: true },
+  });
+  const taxCents = taxShareOfNextPayment(
+    invoice.totalCents,
+    invoice.salesTaxCents,
+    prior.map((p) => p.amountCents),
+    amountCents,
+  );
+
   const income = await prisma.income.create({
     data: {
       accountId,
       date,
       taxYear: taxYearOf(date),
       source: invoice.customer.name,
-      description: `Invoice ${invoice.number} — ${invoice.customer.name} (${formatCents(amountCents)})`,
-      amountCents,
+      description:
+        taxCents > 0
+          ? `Invoice ${invoice.number} — ${invoice.customer.name} (${formatCents(amountCents)} paid, ${formatCents(taxCents)} sales tax)`
+          : `Invoice ${invoice.number} — ${invoice.customer.name} (${formatCents(amountCents)})`,
+      amountCents: amountCents - taxCents,
       division: invoice.division,
       category: incomeCategoryForDivision(invoice.division),
       paymentMethod: method,
@@ -400,4 +427,56 @@ export async function deletePayment(formData: FormData) {
     }
   }
   redirect(invoiceId ? `/invoices/${invoiceId}` : "/invoices");
+}
+
+// A payment booked before the tax split still carries its sales tax in
+// Income. On the owner's confirmation — never automatically — take that
+// share out of that one income row and say so in its notes.
+export async function removeTaxFromIncome(formData: FormData) {
+  const accountId = await requireAccountId();
+  const paymentId = str(formData.get("paymentId"));
+  const payment = paymentId
+    ? await prisma.payment.findFirst({
+        where: { id: paymentId, accountId },
+        include: {
+          invoice: {
+            select: {
+              id: true,
+              accountId: true,
+              totalCents: true,
+              salesTaxCents: true,
+              payments: {
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+                select: { id: true, amountCents: true },
+              },
+            },
+          },
+        },
+      })
+    : null;
+  if (!payment || payment.invoice.accountId !== accountId) redirect("/invoices");
+  const back = `/invoices/${payment.invoice.id}`;
+  const income = payment.incomeId
+    ? await prisma.income.findFirst({ where: { id: payment.incomeId, accountId } })
+    : null;
+  if (!income) redirect(`${back}#payments`);
+
+  const shares = allocatePaymentTax(
+    payment.invoice.totalCents,
+    payment.invoice.salesTaxCents,
+    payment.invoice.payments.map((p) => p.amountCents),
+  );
+  const share = shares[payment.invoice.payments.findIndex((p) => p.id === payment.id)] ?? 0;
+  // Only while the row still holds the tax, so a second tap changes nothing.
+  if (share > 0 && income.amountCents >= payment.amountCents) {
+    const note = `${formatCents(share)} sales tax taken out ${formatDate(new Date())} — owed to the state.`;
+    await prisma.income.updateMany({
+      where: { id: income.id, accountId },
+      data: {
+        amountCents: income.amountCents - share,
+        notes: income.notes ? `${income.notes}\n${note}` : note,
+      },
+    });
+  }
+  redirect(`${back}?saved=income-tax#payments`);
 }

@@ -10,6 +10,8 @@ export function fixHref(issue: Issue, r: EngineResult): string {
     case "SETUP":
       return "/tax/sales/setup";
     case "INVOICE": {
+      // The fix lives on the payment itself.
+      if (issue.code === "INCOME_INCLUDES_TAX") return `/invoices/${f.id}#payments`;
       if (issue.code === "NO_LOCATION" || issue.code === "LOCATION_GONE")
         return `${review}#inv-${f.id}`;
       if (issue.code === "CUSTOMER_NO_REASON" || issue.code === "CUSTOMER_NO_CERT") {

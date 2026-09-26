@@ -38,6 +38,7 @@ import {
   ppmToPercentLabel,
   taxOn,
 } from "./format";
+import { allocatePaymentTax } from "./split";
 import type {
   AuthorityIn,
   EngineInput,
@@ -897,13 +898,21 @@ export function computeSalesTax(input: EngineInput): EngineResult {
     }
   }
 
-  // Tax collected is owed to the state — flag income that booked it as revenue.
+  // Tax collected is owed to the state — flag income that booked it as
+  // revenue: a payment whose linked income is still the whole payment. Income
+  // posted net of its tax share (the app does this now) is already right.
   for (const inv of input.invoices) {
     if (inv.kind !== "INVOICE" || inv.salesTaxCents <= 0 || inv.totalCents <= 0) continue;
-    const inPeriod = inv.payments.filter((p) => p.incomeId && periodOf(p.date) === period);
-    if (inPeriod.length === 0) continue;
-    const paidHere = inPeriod.reduce((s, p) => s + p.amountCents, 0);
-    const taxShare = Math.round((paidHere * inv.salesTaxCents) / inv.totalCents);
+    const shares = allocatePaymentTax(
+      inv.totalCents,
+      inv.salesTaxCents,
+      inv.payments.map((p) => p.amountCents),
+    );
+    let taxShare = 0;
+    inv.payments.forEach((p, i) => {
+      if (!p.incomeId || p.incomeAmountCents === null || periodOf(p.date) !== period) return;
+      if (p.incomeAmountCents >= p.amountCents) taxShare += shares[i];
+    });
     if (taxShare > 0) {
       issues.warn(
         "INCOME_INCLUDES_TAX",

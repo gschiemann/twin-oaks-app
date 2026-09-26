@@ -81,7 +81,11 @@ feature work.
   `deriveInvoiceStatus` (invoice-bits.ts); never store them. Drafts are
   editable; sent invoices are financial records (line edits blocked).
   Recording a payment auto-creates a linked Income row
-  (`incomeCategoryForDivision`); deleting the payment deletes that row.
+  (`incomeCategoryForDivision`) for its PRE-TAX share only — the sales tax
+  in a payment is owed to the state (`src/lib/sales-tax/split.ts` allocates
+  it in recording order); deleting the payment deletes that row. Income
+  booked before that split is flagged per payment and fixed only on the
+  owner's confirmation, never automatically.
   Invoice numbers are `INV-NNN` via `nextInvoiceNumber`.
 - **Schema changes MUST update `src/lib/ensure-schema.ts`:** regenerate the
   DDL (`prisma migrate diff --from-empty --to-schema-datamodel
@@ -108,7 +112,8 @@ pnpm db:push / db:seed / db:reset / db:generate
 ```
 
 CI (`.github/workflows/ci.yml`) runs install → prisma db push (throwaway
-SQLite) → seed → typecheck → build on every push/PR. Keep it green.
+Postgres) → seed → typecheck → test (`pnpm test`) → build on every
+push/PR. Keep it green.
 
 ## Known state / next steps
 

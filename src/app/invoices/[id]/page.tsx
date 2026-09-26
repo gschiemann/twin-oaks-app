@@ -12,10 +12,12 @@ import {
   type ProductType,
 } from "@/lib/domain";
 import { periodOf } from "@/lib/sales-tax/format";
+import { allocatePaymentTax } from "@/lib/sales-tax/split";
 import {
   Card,
   Chip,
   PageHeader,
+  SavedBanner,
   btnPrimaryCls,
   btnSecondaryCls,
   divisionTone,
@@ -29,7 +31,14 @@ import {
   paidCentsOf,
 } from "../invoice-bits";
 import { formatRate } from "@/lib/tax";
-import { convertQuote, deleteInvoice, deletePayment, recordPayment, setInvoiceStatus } from "../actions";
+import {
+  convertQuote,
+  deleteInvoice,
+  deletePayment,
+  recordPayment,
+  removeTaxFromIncome,
+  setInvoiceStatus,
+} from "../actions";
 import DocumentsCard from "@/components/DocumentsCard";
 
 export const dynamic = "force-dynamic";
@@ -56,11 +65,11 @@ export default async function InvoiceDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; fix?: string; saved?: string }>;
 }) {
   const accountId = await requireAccountId();
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, fix, saved } = await searchParams;
   const invoice = await prisma.invoice.findFirst({
     where: { id, accountId },
     include: {
@@ -90,6 +99,32 @@ export default async function InvoiceDetailPage({
     !isQuote &&
     invoice.status !== "CANCELLED" &&
     (!taxLocation || invoice.lines.some((l) => l.productType === "UNCLASSIFIED"));
+  // Each payment's sales tax share (recording order), and whether its income
+  // row still holds that tax — payments booked before the split do.
+  const recorded = [...invoice.payments].sort(
+    (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+  );
+  const shares = allocatePaymentTax(
+    invoice.totalCents,
+    invoice.salesTaxCents,
+    recorded.map((p) => p.amountCents),
+  );
+  const taxShareOf = new Map(recorded.map((p, i) => [p.id, shares[i]]));
+  const incomeIds = invoice.payments.map((p) => p.incomeId).filter((v): v is string => !!v);
+  const incomes = incomeIds.length
+    ? await prisma.income.findMany({
+        where: { accountId, id: { in: incomeIds } },
+        select: { id: true, amountCents: true },
+      })
+    : [];
+  const incomeById = new Map(incomes.map((i) => [i.id, i]));
+  const taxInIncome = (p: (typeof invoice.payments)[number]): number => {
+    const inc = p.incomeId ? incomeById.get(p.incomeId) : undefined;
+    const share = taxShareOf.get(p.id) ?? 0;
+    return inc && share > 0 && inc.amountCents >= p.amountCents ? share : 0;
+  };
+  const fixing = fix ? invoice.payments.find((p) => p.id === fix && taxInIncome(p) > 0) : undefined;
+  const fixingIncome = fixing?.incomeId ? incomeById.get(fixing.incomeId) : undefined;
   const acceptedInvoice = invoice.convertedToInvoiceId
     ? await prisma.invoice.findFirst({
         where: { id: invoice.convertedToInvoiceId, accountId },
@@ -113,6 +148,31 @@ export default async function InvoiceDetailPage({
         <Link href={`/invoices/${invoice.id}/packing`} className={`${btnSecondaryCls} mb-4 w-full`}>
           📦 Packing list
         </Link>
+      ) : null}
+
+      {saved === "income-tax" ? <SavedBanner title="Sales tax taken out of income." /> : null}
+
+      {fixing && fixingIncome ? (
+        <Card className="mb-4 border-2 border-amber-300 bg-amber-50">
+          <p className="text-base font-semibold text-amber-900">
+            Take {formatCents(taxInIncome(fixing))} sales tax out of this income?
+          </p>
+          <p className="mt-1 text-sm tabular-nums text-amber-900">
+            {formatCents(fixingIncome.amountCents)} →{" "}
+            {formatCents(fixingIncome.amountCents - taxInIncome(fixing))}
+          </p>
+          <div className="mt-3 flex gap-2">
+            <form action={removeTaxFromIncome} className="flex-1">
+              <input type="hidden" name="paymentId" value={fixing.id} />
+              <button type="submit" className={`${btnPrimaryCls} w-full`}>
+                Take it out
+              </button>
+            </form>
+            <Link href={`/invoices/${invoice.id}#payments`} className={`${btnSecondaryCls} flex-1`}>
+              Cancel
+            </Link>
+          </div>
+        </Card>
       ) : null}
 
       {error && ERROR_MESSAGES[error] ? (
@@ -256,6 +316,7 @@ export default async function InvoiceDetailPage({
 
       {!isQuote ? (
       <Card className="mb-4">
+        <div id="payments" className="scroll-mt-20" />
         <h2 className="mb-2 font-semibold text-stone-900">
           Payments {invoice.payments.length > 0 ? `(${invoice.payments.length})` : ""}
         </h2>
@@ -273,7 +334,19 @@ export default async function InvoiceDetailPage({
                     {formatDate(p.date)}
                     {p.method ? ` · ${p.method}` : ""}
                     {p.checkNumber ? ` · check #${p.checkNumber}` : ""}
+                    {(taxShareOf.get(p.id) ?? 0) > 0
+                      ? ` · incl. ${formatCents(taxShareOf.get(p.id) ?? 0)} sales tax`
+                      : ""}
                   </div>
+                  {taxInIncome(p) > 0 ? (
+                    <Link
+                      href={`/invoices/${invoice.id}?fix=${p.id}`}
+                      className="mt-0.5 block text-sm font-medium text-amber-800"
+                    >
+                      Income includes {formatCents(taxInIncome(p))} tax ·{" "}
+                      <span className="underline">Fix</span>
+                    </Link>
+                  ) : null}
                 </div>
                 <form action={deletePayment} className="shrink-0">
                   <input type="hidden" name="id" value={p.id} />
@@ -352,7 +425,7 @@ export default async function InvoiceDetailPage({
                 Record payment
               </button>
               <p className="text-xs text-stone-500">
-                Payments post to your Income books automatically.
+                Posts to Income, less any sales tax.
               </p>
             </form>
           </details>
