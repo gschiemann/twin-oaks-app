@@ -9,6 +9,7 @@
     "build": "bash scripts/vercel-build.sh",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/__tests__/*.test.ts\"",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",

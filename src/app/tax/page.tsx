@@ -115,6 +115,17 @@ export default async function TaxCenterPage({
         </div>
       ) : null}
 
+      <Link
+        href="/tax/sales"
+        className="mb-4 flex items-center justify-between rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm"
+      >
+        <span>
+          <span className="block font-semibold text-stone-900">Sales tax</span>
+          <span className="text-xs text-stone-500">Monthly state + local workpaper</span>
+        </span>
+        <span className="text-sm font-semibold text-oak-700">Open →</span>
+      </Link>
+
       <div className="mb-4 grid grid-cols-3 gap-2">
         <StatCard label="Revenue" value={formatCents(revenue)} tone="green" />
         <StatCard label="Expenses" value={formatCents(expenses)} />

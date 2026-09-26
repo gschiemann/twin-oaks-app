@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
 import { parseDateInput, taxYearOf } from "@/lib/dates";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
-import { ALL_DIVISIONS } from "@/lib/domain";
+import { ALL_DIVISIONS, PRODUCT_TYPES, TAX_TREATMENTS_SALES } from "@/lib/domain";
 import { computeTax, isExempt, rateForCustomer } from "@/lib/tax";
 import { getBusinessProfile, snapshotBusiness } from "@/lib/business";
 import { incomeCategoryForDivision } from "./invoice-bits";
@@ -23,10 +23,20 @@ type ParsedLine = {
   unitPriceCents: number;
   totalCents: number;
   taxable: boolean;
+  productType: string;
+  taxTreatmentOverride: string | null;
+  exemptionReason: string | null;
+  evidenceDocumentId: string | null;
+  originalLineId: string | null;
 };
 
+function oneOf(list: readonly string[], v: string | null): string | null {
+  return v && list.includes(v) ? v : null;
+}
+
 // The lines editor posts fields named line-desc-<k>, line-qty-<k>,
-// line-price-<k> — collect them in key order.
+// line-price-<k> (+ the sales tax kind and any review decision) — collect
+// them in key order.
 function parseLines(formData: FormData): ParsedLine[] {
   const keys: string[] = [];
   for (const key of formData.keys()) {
@@ -50,9 +60,37 @@ function parseLines(formData: FormData): ParsedLine[] {
       totalCents: Math.round(quantity * unitPriceCents),
       // An unchecked checkbox posts nothing at all, so absence means exempt.
       taxable: formData.get(`line-taxable-${k}`) != null,
+      productType: oneOf(PRODUCT_TYPES, str(formData.get(`line-type-${k}`))) ?? "UNCLASSIFIED",
+      taxTreatmentOverride: oneOf(TAX_TREATMENTS_SALES, str(formData.get(`line-override-${k}`))),
+      exemptionReason: str(formData.get(`line-reason-${k}`)),
+      evidenceDocumentId: str(formData.get(`line-evidence-${k}`)),
+      originalLineId: str(formData.get(`line-original-${k}`)),
     });
   }
   return lines;
+}
+
+// Ids that ride along in hidden fields are re-checked against this account
+// before they're stored — a posted id from someone else's books is dropped.
+async function scopeLineRefs(accountId: string, lines: ParsedLine[]): Promise<ParsedLine[]> {
+  const docIds = lines.map((l) => l.evidenceDocumentId).filter((v): v is string => !!v);
+  const lineIds = lines.map((l) => l.originalLineId).filter((v): v is string => !!v);
+  const [docs, originals] = await Promise.all([
+    docIds.length
+      ? prisma.document.findMany({ where: { accountId, id: { in: docIds } }, select: { id: true } })
+      : [],
+    lineIds.length
+      ? prisma.invoiceLine.findMany({ where: { id: { in: lineIds }, invoice: { accountId } }, select: { id: true } })
+      : [],
+  ]);
+  const okDocs = new Set(docs.map((d) => d.id));
+  const okLines = new Set(originals.map((l) => l.id));
+  return lines.map((l) => ({
+    ...l,
+    evidenceDocumentId: l.evidenceDocumentId && okDocs.has(l.evidenceDocumentId) ? l.evidenceDocumentId : null,
+    originalLineId:
+      l.productType === "REFUND" && l.originalLineId && okLines.has(l.originalLineId) ? l.originalLineId : null,
+  }));
 }
 
 async function invoiceCoreFromForm(accountId: string, formData: FormData) {
@@ -61,7 +99,7 @@ async function invoiceCoreFromForm(accountId: string, formData: FormData) {
   if (!customerId || !division || !(ALL_DIVISIONS as readonly string[]).includes(division)) {
     return null;
   }
-  const lines = parseLines(formData);
+  const lines = await scopeLineRefs(accountId, parseLines(formData));
   if (lines.length === 0) return null;
 
   const issueDate = parseDateInput(formData.get("issueDate")) ?? new Date();
@@ -88,6 +126,12 @@ async function invoiceCoreFromForm(accountId: string, formData: FormData) {
   const manualTaxCents = exempt ? null : parseDollarsToCents(formData.get("manualTax"));
   const tax = computeTax(lines, taxRatePercent, manualTaxCents);
 
+  // Where the sale is taxed — only ever one of this account's locations.
+  const locationId = str(formData.get("taxLocationId"));
+  const location = locationId
+    ? await prisma.taxLocation.findFirst({ where: { id: locationId, accountId }, select: { id: true } })
+    : null;
+
   return {
     core: {
       accountId,
@@ -99,6 +143,7 @@ async function invoiceCoreFromForm(accountId: string, formData: FormData) {
       terms: str(formData.get("terms")),
       notes: str(formData.get("notes")),
       shipToAddress: str(formData.get("shipToAddress")),
+      taxLocationId: location?.id ?? null,
       subtotalCents: tax.subtotalCents,
       salesTaxCents: tax.salesTaxCents,
       totalCents: tax.totalCents,
@@ -177,6 +222,7 @@ export async function convertQuote(formData: FormData) {
       taxRatePercent: quote.taxRatePercent,
       taxManualOverride: quote.taxManualOverride,
       shipToAddress: quote.shipToAddress,
+      taxLocationId: quote.taxLocationId,
       lines: {
         create: quote.lines.map((l, i) => ({
           sortOrder: i,
@@ -185,6 +231,11 @@ export async function convertQuote(formData: FormData) {
           unitPriceCents: l.unitPriceCents,
           totalCents: l.totalCents,
           taxable: l.taxable,
+          productType: l.productType,
+          taxTreatmentOverride: l.taxTreatmentOverride,
+          exemptionReason: l.exemptionReason,
+          evidenceDocumentId: l.evidenceDocumentId,
+          originalLineId: l.originalLineId,
         })),
       },
     },

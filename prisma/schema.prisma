@@ -266,6 +266,11 @@ model BusinessProfile {
   logoPath              String? // storage key, same pipeline as receipts
   // BUG-001: the house sales-tax rate new invoices start from.
   defaultTaxRatePercent Float    @default(0)
+  // Sales tax: which date puts a sale in a month (SALE_DATE | PAYMENT_DATE),
+  // and who approved it. Null = not chosen yet, which blocks filing.
+  salesTaxBasis           String?
+  salesTaxBasisApprovedBy String?
+  salesTaxBasisApprovedAt DateTime?
   updatedAt             DateTime @updatedAt
 }
 
@@ -368,6 +373,9 @@ model Invoice {
   // so editing Settings later cannot alter an already-issued invoice.
   businessSnapshot  String?
   shipToAddress     String?
+  // Sales tax: the TaxLocation this sale is taxed at (its destination).
+  // Blank blocks automatic tax allocation — never guessed.
+  taxLocationId String?
   taxYear       Int
   lines         InvoiceLine[]
   payments      Payment[]
@@ -393,6 +401,16 @@ model InvoiceLine {
   // BUG-001: labor/services/freight are often exempt — tax is summed over
   // taxable lines only.
   taxable        Boolean @default(true)
+  // Sales tax classification. productType picks the approved SalesTaxRule;
+  // the override fields let one line differ from its type's rule. Historic
+  // lines stay UNCLASSIFIED (= needs review) until a human classifies them.
+  productType          String  @default("UNCLASSIFIED") // see PRODUCT_TYPES
+  taxTreatmentOverride String? // TAXABLE | EXEMPT | WHOLESALE | NEEDS_REVIEW
+  exemptionReason      String?
+  evidenceDocumentId   String? // a Document (e.g. resale certificate)
+  // REFUND lines point at the line they return, so the return is reported
+  // against the original sale's treatment and rate.
+  originalLineId       String?
 }
 
 model Payment {
@@ -545,6 +563,11 @@ model LivestockSale {
   weightLbs       Float?
   paymentMethod   String?
   incomeId        String? // auto-created Income row
+  // Sales tax: where the sale is taxed, plus an optional per-sale decision
+  // (otherwise the approved LIVE_LIVESTOCK rule applies).
+  taxLocationId        String?
+  taxTreatmentOverride String?
+  exemptionReason      String?
   processingNotes String?
   notes           String?
   taxYear         Int
@@ -751,4 +774,133 @@ model RecurringBill {
   updatedAt          DateTime @updatedAt
 
   @@index([accountId])
+}
+
+// ———————————————————————————————————————————————————————————————————————
+// Sales tax — Alabama state + local (see src/lib/sales-tax/)
+//
+// The invoice stays the source of truth for what was sold and what tax was
+// collected. These records say WHO taxes a sale (authorities), at WHAT rate
+// on a given day (effective-dated rates), WHERE (locations), and which
+// product types a human has approved a treatment for (rules). The monthly
+// workpaper is computed from them; nothing here rewrites an invoice.
+// ———————————————————————————————————————————————————————————————————————
+
+// A taxing authority: the State of Alabama, a county, a city, a police
+// jurisdiction. Codes are text exactly as the authority publishes them.
+model TaxAuthority {
+  id               String    @id @default(cuid())
+  accountId        String
+  name             String // "State of Alabama", "Houston County"
+  level            String // STATE | COUNTY | CITY | POLICE_JURISDICTION | OTHER
+  jurisdictionCode String    @default("") // as published (e.g. ALDOR local code)
+  taxType          String // as published: "SS" state sales, "ST" local sales
+  notes            String?
+  rates            TaxRate[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([accountId])
+}
+
+// One rate for one authority and rate class, over a date range. A rate
+// change is a NEW row with a new effectiveFrom — never an edit of the old
+// one — so a past sale is always taxed at the rate in force that day.
+model TaxRate {
+  id            String       @id @default(cuid())
+  accountId     String
+  authorityId   String
+  authority     TaxAuthority @relation(fields: [authorityId], references: [id], onDelete: Cascade)
+  rateClass     String // see RATE_CLASSES (normalized)
+  rateTypeCode  String // exactly as the return shows it: "OTHER", "GENER"
+  // Exact fixed-point fraction x 1,000,000: 40000 = 4%, 1250 = 0.125%.
+  // Integer, so rates are exact and tax math never touches a float.
+  ratePpm       Int
+  effectiveFrom DateTime // first day in force (local noon)
+  effectiveTo   DateTime? // last day in force (inclusive); null = open-ended
+  source        String // where the rate came from (file / URL + date)
+  // When a human last confirmed the rate is still current. Open-ended rates
+  // not re-confirmed for a year block filing — local rates do change.
+  confirmedAt   DateTime     @default(now())
+  createdAt     DateTime     @default(now())
+
+  @@index([accountId, authorityId])
+}
+
+// Where sales are taxed: a pickup spot or a delivery destination, and the
+// authorities that tax a sale delivered there.
+model TaxLocation {
+  id                 String   @id @default(cuid())
+  accountId          String
+  name               String // "Farm pickup", "Dothan delivery"
+  address            String?
+  city               String?
+  county             String?
+  state              String   @default("AL")
+  postalCode         String?
+  insideCity         Boolean  @default(false)
+  policeJurisdiction String?
+  // TaxAuthority ids, comma-separated. A missing id blocks filing.
+  authorityIdsCsv    String   @default("")
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([accountId])
+}
+
+// A human decision: how one product type is treated. Until a type has a
+// rule, every line of that type needs review. Records who approved it.
+model SalesTaxRule {
+  id                String   @id @default(cuid())
+  accountId         String
+  productType       String // see PRODUCT_TYPES
+  treatment         String // TAXABLE | EXEMPT | WHOLESALE | NEEDS_REVIEW
+  rateClass         String   @default("GENERAL")
+  exemptionReason   String?
+  // Exempt lines of this type must point at a supporting document.
+  requiresEvidence  Boolean  @default(false)
+  approvedBy        String
+  approvedAt        DateTime
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([accountId, productType])
+  @@index([accountId])
+}
+
+// An immutable copy of a month's workpaper at close (or a later correction).
+// Any saved return is reproducible from snapshotJson alone.
+model SalesTaxSnapshot {
+  id                String   @id @default(cuid())
+  accountId         String
+  period            String // "2026-09"
+  kind              String // CLOSE | CORRECTION
+  basis             String
+  reviewerName      String
+  note              String?
+  grossSalesCents   Int
+  taxableCents      Int
+  taxCents          Int
+  snapshotJson      String
+  createdAt         DateTime @default(now())
+
+  @@index([accountId, period])
+}
+
+// Proof a return was filed: confirmation from My Alabama Taxes / ONE SPOT.
+model SalesTaxFiling {
+  id                 String   @id @default(cuid())
+  accountId          String
+  period             String
+  snapshotId         String?
+  filedOn            DateTime
+  confirmationNumber String?
+  amountPaidCents    Int?
+  filedBy            String
+  notes              String?
+  createdAt          DateTime @default(now())
+
+  @@index([accountId, period])
 }

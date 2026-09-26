@@ -40,6 +40,7 @@ const groups = [
       { href: "/search", label: "Search", desc: "Find any expense, receipt, or record in seconds" },
       { href: "/documents", label: "Documents", desc: "Photos, manuals, warranties and paperwork" },
       { href: "/tax", label: "Tax Center", desc: "Year totals, flagged items, and the accountant package" },
+      { href: "/tax/sales", label: "Sales tax", desc: "Monthly Alabama state + local figures, ready to file" },
       { href: "/settings/email", label: "Email receipts", desc: "Forward a receipt from your inbox — it lands in the Inbox" },
     ],
   },

@@ -276,6 +276,11 @@ export async function createLivestockSale(formData: FormData) {
   const paymentMethod = str(formData.get("paymentMethod"));
   const notes = str(formData.get("notes"));
   const what = animal ? `tag #${animal.tagNumber}` : "livestock";
+  // Sales tax: where the sale is taxed — only ever this account's location.
+  const locationId = str(formData.get("taxLocationId"));
+  const taxLocation = locationId
+    ? await prisma.taxLocation.findFirst({ where: { id: locationId, accountId }, select: { id: true } })
+    : null;
 
   const income = await prisma.income.create({
     data: {
@@ -304,6 +309,7 @@ export async function createLivestockSale(formData: FormData) {
       weightLbs: num(formData.get("weightLbs")),
       paymentMethod,
       incomeId: income.id,
+      taxLocationId: taxLocation?.id ?? null,
       processingNotes: str(formData.get("processingNotes")),
       notes,
     },

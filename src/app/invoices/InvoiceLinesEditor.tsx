@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { inputCls, labelCls } from "@/components/ui";
 import { rateForCustomer, type CustomerTaxRule } from "@/lib/tax";
+import { PRODUCT_TYPES, PRODUCT_TYPE_LABELS } from "@/lib/domain";
 
 // BUG-001: the operator never calculates tax by hand. Every keystroke here
 // re-derives subtotal → taxable base → tax → total, and the same arithmetic
@@ -15,7 +16,41 @@ type Row = {
   quantity: string;
   price: string;
   taxable: boolean;
+  // Sales tax classification. Only the kind is edited here; a decision made
+  // on the tax review page rides along untouched through draft edits.
+  productType: string;
+  taxTreatmentOverride: string;
+  exemptionReason: string;
+  evidenceDocumentId: string;
+  originalLineId: string;
 };
+
+export type EditorLine = {
+  description: string;
+  quantity: number;
+  unitPriceCents: number;
+  taxable: boolean;
+  productType?: string;
+  taxTreatmentOverride?: string | null;
+  exemptionReason?: string | null;
+  evidenceDocumentId?: string | null;
+  originalLineId?: string | null;
+};
+
+export type TaxLocationOption = { id: string; name: string; ratePercent: number | null };
+
+const blankRow = (key: number, productType = "UNCLASSIFIED"): Row => ({
+  key,
+  description: "",
+  quantity: "1",
+  price: "",
+  taxable: true,
+  productType,
+  taxTreatmentOverride: "",
+  exemptionReason: "",
+  evidenceDocumentId: "",
+  originalLineId: "",
+});
 
 function rowTotalCents(r: Row): number {
   const qty = Number(r.quantity) || 0;
@@ -32,17 +67,17 @@ export default function InvoiceLinesEditor({
   initialTaxRatePercent,
   initialManualTaxCents,
   customer,
+  salesTax,
+  initialTaxLocationId,
 }: {
-  initialLines?: {
-    description: string;
-    quantity: number;
-    unitPriceCents: number;
-    taxable: boolean;
-  }[];
+  initialLines?: EditorLine[];
   defaultTaxRatePercent: number;
   initialTaxRatePercent?: number | null;
   initialManualTaxCents?: number | null;
   customer?: (CustomerTaxRule & { name?: string }) | null;
+  /** Present when the account uses sales tax: where it's taxed + each kind's rule. */
+  salesTax?: { locations: TaxLocationOption[]; ruleTreatments: Record<string, string> } | null;
+  initialTaxLocationId?: string | null;
 }) {
   const [rows, setRows] = useState<Row[]>(() =>
     initialLines && initialLines.length > 0
@@ -52,9 +87,17 @@ export default function InvoiceLinesEditor({
           quantity: String(l.quantity),
           price: (l.unitPriceCents / 100).toFixed(2),
           taxable: l.taxable,
+          productType: l.productType ?? "UNCLASSIFIED",
+          taxTreatmentOverride: l.taxTreatmentOverride ?? "",
+          exemptionReason: l.exemptionReason ?? "",
+          evidenceDocumentId: l.evidenceDocumentId ?? "",
+          originalLineId: l.originalLineId ?? "",
         }))
-      : [{ key: 0, description: "", quantity: "1", price: "", taxable: true }],
+      : [blankRow(0)],
   );
+  const [locationId, setLocationId] = useState(initialTaxLocationId ?? "");
+  const locations = salesTax?.locations ?? [];
+  const location = locations.find((l) => l.id === locationId) ?? null;
   const [nextKey, setNextKey] = useState(rows.length);
   const [rate, setRate] = useState(
     String(initialTaxRatePercent ?? defaultTaxRatePercent ?? 0),
@@ -76,7 +119,14 @@ export default function InvoiceLinesEditor({
       return;
     }
     if (!customer) return;
-    setRate(String(rateForCustomer(customer, defaultTaxRatePercent)));
+    // A chosen "taxed at" location already carries the right combined rate.
+    setRate(
+      String(
+        location?.ratePercent != null && customer.taxTreatment !== "EXEMPT"
+          ? location.ratePercent
+          : rateForCustomer(customer, defaultTaxRatePercent),
+      ),
+    );
     if (customer.taxTreatment === "EXEMPT") setManualOn(false);
     // customerKey encodes everything that can change the derived rate.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,6 +146,16 @@ export default function InvoiceLinesEditor({
 
   const update = (key: number, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+
+  // Picking a kind pre-ticks Taxable from its approved rule; the box stays
+  // the operator's to change.
+  const setKind = (key: number, productType: string) => {
+    const t = salesTax?.ruleTreatments[productType];
+    update(key, {
+      productType,
+      ...(t === "TAXABLE" ? { taxable: true } : t === "EXEMPT" || t === "WHOLESALE" ? { taxable: false } : {}),
+    });
+  };
 
   return (
     <div>
@@ -146,16 +206,40 @@ export default function InvoiceLinesEditor({
                 </button>
               ) : null}
             </div>
-            <label className="mt-2 flex items-center gap-2 text-xs font-medium text-stone-600">
-              <input
-                type="checkbox"
-                name={`line-taxable-${r.key}`}
-                checked={r.taxable}
-                onChange={(e) => update(r.key, { taxable: e.target.checked })}
-                className="accent-oak-700"
-              />
-              Taxable
-            </label>
+            <div className="mt-2 flex items-center gap-3">
+              {salesTax ? (
+                <select
+                  name={`line-type-${r.key}`}
+                  value={r.productType}
+                  onChange={(e) => setKind(r.key, e.target.value)}
+                  aria-label="Kind of sale"
+                  className={`${inputCls} flex-1`}
+                >
+                  <option value="UNCLASSIFIED">Kind of sale…</option>
+                  {PRODUCT_TYPES.filter((t) => t !== "UNCLASSIFIED").map((t) => (
+                    <option key={t} value={t}>
+                      {PRODUCT_TYPE_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input type="hidden" name={`line-type-${r.key}`} value={r.productType} />
+              )}
+              <label className="flex shrink-0 items-center gap-2 text-xs font-medium text-stone-600">
+                <input
+                  type="checkbox"
+                  name={`line-taxable-${r.key}`}
+                  checked={r.taxable}
+                  onChange={(e) => update(r.key, { taxable: e.target.checked })}
+                  className="accent-oak-700"
+                />
+                Taxable
+              </label>
+            </div>
+            <input type="hidden" name={`line-override-${r.key}`} value={r.taxTreatmentOverride} />
+            <input type="hidden" name={`line-reason-${r.key}`} value={r.exemptionReason} />
+            <input type="hidden" name={`line-evidence-${r.key}`} value={r.evidenceDocumentId} />
+            <input type="hidden" name={`line-original-${r.key}`} value={r.originalLineId} />
           </div>
         ))}
       </div>
@@ -163,10 +247,13 @@ export default function InvoiceLinesEditor({
       <button
         type="button"
         onClick={() => {
-          setRows((rs) => [
-            ...rs,
-            { key: nextKey, description: "", quantity: "1", price: "", taxable: true },
-          ]);
+          // With sales tax on, a new line starts as the same kind (and
+          // taxability) as the one above it.
+          setRows((rs) => {
+            const last = rs[rs.length - 1];
+            if (!salesTax || !last) return [...rs, blankRow(nextKey)];
+            return [...rs, { ...blankRow(nextKey, last.productType), taxable: last.taxable }];
+          });
           setNextKey((k) => k + 1);
         }}
         className="mt-2 text-sm font-semibold text-oak-700"
@@ -176,6 +263,34 @@ export default function InvoiceLinesEditor({
 
       {/* Sales tax — calculated, with an escape hatch */}
       <div className="mt-4 rounded-xl border border-stone-200 bg-white p-3">
+        {locations.length > 0 ? (
+          <div className="mb-3">
+            <label className="mb-1 block text-xs text-stone-500" htmlFor="taxLocationId">
+              Taxed at
+            </label>
+            <select
+              id="taxLocationId"
+              name="taxLocationId"
+              value={locationId}
+              onChange={(e) => {
+                setLocationId(e.target.value);
+                const picked = locations.find((l) => l.id === e.target.value);
+                if (picked?.ratePercent != null && !exempt) setRate(String(picked.ratePercent));
+              }}
+              className={inputCls}
+            >
+              <option value="">Where is this sale taxed?</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                  {l.ratePercent != null ? ` — ${l.ratePercent}%` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <input type="hidden" name="taxLocationId" value={locationId} />
+        )}
         {exempt ? (
           <p className="mb-3 rounded-lg bg-oak-50 px-3 py-2 text-sm font-medium text-oak-900">
             🚫 This customer is tax exempt — no tax will be charged.

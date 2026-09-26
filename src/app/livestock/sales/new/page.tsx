@@ -24,12 +24,17 @@ export default async function NewLivestockSalePage({
   const accountId = await requireAccountId();
   const { error, animalId } = await searchParams;
 
-  const [animals, customers] = await Promise.all([
+  const [animals, customers, locations] = await Promise.all([
     prisma.animal.findMany({
       where: { accountId },
       select: { id: true, tagNumber: true, name: true, status: true },
     }),
     prisma.customer.findMany({
+      where: { accountId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.taxLocation.findMany({
       where: { accountId },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
@@ -151,6 +156,22 @@ export default async function NewLivestockSalePage({
               </select>
             </div>
           </div>
+
+          {locations.length > 0 ? (
+            <div>
+              <label className={labelCls} htmlFor="taxLocationId">
+                Taxed at
+              </label>
+              <select id="taxLocationId" name="taxLocationId" defaultValue="" className={inputCls}>
+                <option value="">Where is this sale taxed?</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
           <div>
             <label className={labelCls} htmlFor="processingNotes">

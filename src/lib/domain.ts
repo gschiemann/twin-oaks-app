@@ -379,3 +379,106 @@ export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
   CAD: "CAD / STL file",
   DOCUMENT: "Document",
 };
+
+// ———————————————————————————————————————————————————————————————————————
+// Sales tax (Alabama state + local). The app ORGANIZES sales tax; it never
+// decides a line's tax treatment on its own. A product type is only treated
+// as taxable/exempt once a human has approved a rule for it (SalesTaxRule);
+// until then every line of that type is NEEDS_REVIEW and blocks filing.
+// ———————————————————————————————————————————————————————————————————————
+
+// What a sale line IS. Distinct types exist because Alabama treats them
+// differently (e.g. separately billed repair labor vs fabrication labor).
+export const PRODUCT_TYPES = [
+  "PRINTED_PART",
+  "OTHER_GOODS",
+  "LIVE_LIVESTOCK",
+  "DESIGN_STANDALONE",
+  "DESIGN_WITH_PRODUCT",
+  "FABRICATION_LABOR",
+  "REPAIR_LABOR",
+  "SERVICE",
+  "SHIPPING",
+  "DISCOUNT",
+  "REFUND",
+  "UNCLASSIFIED",
+] as const;
+export type ProductType = (typeof PRODUCT_TYPES)[number];
+
+export const PRODUCT_TYPE_LABELS: Record<ProductType, string> = {
+  PRINTED_PART: "Printed part",
+  OTHER_GOODS: "Other goods",
+  LIVE_LIVESTOCK: "Live animal",
+  DESIGN_STANDALONE: "Design work (on its own)",
+  DESIGN_WITH_PRODUCT: "Design work (part of a product)",
+  FABRICATION_LABOR: "Fabrication labor",
+  REPAIR_LABOR: "Repair / install labor (billed separately)",
+  SERVICE: "Other service",
+  SHIPPING: "Shipping / delivery",
+  DISCOUNT: "Discount",
+  REFUND: "Refund / return",
+  UNCLASSIFIED: "Not classified",
+};
+
+// Types that never get a rule of their own: a discount follows the rest of
+// its invoice, a refund follows the line it refunds.
+export const DERIVED_PRODUCT_TYPES: readonly ProductType[] = ["DISCOUNT", "REFUND", "UNCLASSIFIED"];
+
+export const TAX_TREATMENTS_SALES = ["TAXABLE", "EXEMPT", "WHOLESALE", "NEEDS_REVIEW"] as const;
+export type SalesTaxTreatment = (typeof TAX_TREATMENTS_SALES)[number];
+
+export const SALES_TAX_TREATMENT_LABELS: Record<SalesTaxTreatment, string> = {
+  TAXABLE: "Taxable",
+  EXEMPT: "Exempt",
+  WHOLESALE: "Wholesale / resale",
+  NEEDS_REVIEW: "Needs a decision",
+};
+
+// Rate classes, normalized. The code actually printed on a return lives on
+// each TaxRate row (rateTypeCode) exactly as the authority publishes it, so
+// the app never guesses a classification code.
+export const RATE_CLASSES = ["GENERAL", "FARM_MFG", "AUTO", "MACH_VEND", "CONS_VAPOR", "GROCERY"] as const;
+export type RateClass = (typeof RATE_CLASSES)[number];
+
+export const RATE_CLASS_LABELS: Record<RateClass, string> = {
+  GENERAL: "General",
+  FARM_MFG: "Farm & manufacturing machinery",
+  AUTO: "Automotive",
+  MACH_VEND: "Vending machines",
+  CONS_VAPOR: "Consumable vapor products",
+  GROCERY: "Grocery food",
+};
+
+// The codes on Alabama's STATE sales return layout (MAT bulk layout,
+// ALDOR 2023): OTHER is the general column. Used only to pre-fill the rate
+// form — the saved code is whatever the operator confirms.
+export const ALABAMA_STATE_RATE_CODES: Record<RateClass, string> = {
+  GENERAL: "OTHER",
+  FARM_MFG: "FARM-MFG",
+  AUTO: "AUTO",
+  MACH_VEND: "MACH-VEND",
+  CONS_VAPOR: "CONS.VAPOR",
+  GROCERY: "GROC",
+};
+
+export const TAX_AUTHORITY_LEVELS = ["STATE", "COUNTY", "CITY", "POLICE_JURISDICTION", "OTHER"] as const;
+export type TaxAuthorityLevel = (typeof TAX_AUTHORITY_LEVELS)[number];
+
+export const TAX_AUTHORITY_LEVEL_LABELS: Record<TaxAuthorityLevel, string> = {
+  STATE: "State",
+  COUNTY: "County",
+  CITY: "City",
+  POLICE_JURISDICTION: "Police jurisdiction",
+  OTHER: "Other",
+};
+
+// Which date puts a sale in a month. Must be chosen deliberately — an
+// invoice issued in August and paid in September lands in a different
+// month under each.
+export const SALES_TAX_BASES = ["SALE_DATE", "PAYMENT_DATE"] as const;
+export type SalesTaxBasis = (typeof SALES_TAX_BASES)[number];
+
+export const SALES_TAX_BASIS_LABELS: Record<SalesTaxBasis, string> = {
+  SALE_DATE: "Sale date (invoice date)",
+  PAYMENT_DATE: "Payment date (when paid)",
+};

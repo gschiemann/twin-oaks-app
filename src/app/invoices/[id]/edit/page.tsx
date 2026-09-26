@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
 import { getBusinessProfile } from "@/lib/business";
+import { salesTaxOptions } from "@/lib/sales-tax/options";
 import { Card, PageHeader } from "@/components/ui";
 import InvoiceForm from "../../InvoiceForm";
 import { updateInvoice } from "../../actions";
@@ -22,7 +23,7 @@ export default async function EditInvoicePage({
   if (!invoice) notFound();
   if (invoice.status !== "DRAFT") redirect(`/invoices/${invoice.id}`);
 
-  const [customers, profile] = await Promise.all([
+  const [customers, profile, salesTax] = await Promise.all([
     prisma.customer.findMany({
       where: { accountId },
       orderBy: { name: "asc" },
@@ -36,6 +37,7 @@ export default async function EditInvoicePage({
       },
     }),
     getBusinessProfile(accountId),
+    salesTaxOptions(accountId, invoice.issueDate),
   ]);
 
   return (
@@ -49,6 +51,7 @@ export default async function EditInvoicePage({
           kind={invoice.kind === "QUOTE" ? "QUOTE" : "INVOICE"}
           defaultTaxRatePercent={profile.defaultTaxRatePercent}
           divisions={profile.divisions}
+          salesTax={salesTax.enabled ? salesTax : null}
           defaults={{
             id: invoice.id,
             customerId: invoice.customerId,
@@ -61,11 +64,17 @@ export default async function EditInvoicePage({
             salesTaxCents: invoice.salesTaxCents,
             taxRatePercent: invoice.taxRatePercent,
             taxManualOverride: invoice.taxManualOverride,
+            taxLocationId: invoice.taxLocationId,
             lines: invoice.lines.map((l) => ({
               description: l.description,
               quantity: l.quantity,
               unitPriceCents: l.unitPriceCents,
               taxable: l.taxable,
+              productType: l.productType,
+              taxTreatmentOverride: l.taxTreatmentOverride,
+              exemptionReason: l.exemptionReason,
+              evidenceDocumentId: l.evidenceDocumentId,
+              originalLineId: l.originalLineId,
             })),
           }}
         />

@@ -6,7 +6,7 @@ import { type Division } from "@/lib/domain";
 import { toDateInputValue } from "@/lib/dates";
 import { btnPrimaryCls, inputCls, labelCls } from "@/components/ui";
 import DivisionField from "@/components/DivisionField";
-import InvoiceLinesEditor from "./InvoiceLinesEditor";
+import InvoiceLinesEditor, { type EditorLine, type TaxLocationOption } from "./InvoiceLinesEditor";
 
 // Customers carry their own tax rule, so picking one fills the rate in.
 export type CustomerOption = {
@@ -30,12 +30,8 @@ type Defaults = {
   salesTaxCents?: number | null;
   taxRatePercent?: number | null;
   taxManualOverride?: boolean;
-  lines?: {
-    description: string;
-    quantity: number;
-    unitPriceCents: number;
-    taxable: boolean;
-  }[];
+  taxLocationId?: string | null;
+  lines?: EditorLine[];
 };
 
 export default function InvoiceForm({
@@ -46,6 +42,7 @@ export default function InvoiceForm({
   kind = "INVOICE",
   defaultTaxRatePercent,
   divisions,
+  salesTax,
 }: {
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
@@ -54,6 +51,8 @@ export default function InvoiceForm({
   kind?: "INVOICE" | "QUOTE";
   defaultTaxRatePercent: number;
   divisions: Division[];
+  /** Sales tax pickers — only when the account has sales tax set up. */
+  salesTax?: { locations: TaxLocationOption[]; ruleTreatments: Record<string, string> } | null;
 }) {
   const isQuote = kind === "QUOTE";
   const [customerId, setCustomerId] = useState(defaults.customerId ?? "");
@@ -133,6 +132,8 @@ export default function InvoiceForm({
           defaults.taxManualOverride ? (defaults.salesTaxCents ?? 0) : null
         }
         customer={selected}
+        salesTax={salesTax}
+        initialTaxLocationId={defaults.taxLocationId}
       />
 
       <div>

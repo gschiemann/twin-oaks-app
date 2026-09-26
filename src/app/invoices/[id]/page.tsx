@@ -4,7 +4,14 @@ import { prisma } from "@/lib/db";
 import { requireAccountId } from "@/lib/auth";
 import { formatDate, toDateInputValue } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
-import { DIVISION_LABELS, PAYMENT_METHODS, type Division } from "@/lib/domain";
+import {
+  DIVISION_LABELS,
+  PAYMENT_METHODS,
+  PRODUCT_TYPE_LABELS,
+  type Division,
+  type ProductType,
+} from "@/lib/domain";
+import { periodOf } from "@/lib/sales-tax/format";
 import {
   Card,
   Chip,
@@ -69,6 +76,20 @@ export default async function InvoiceDetailPage({
   const balanceCents = invoice.totalCents - paidCents;
   const isQuote = invoice.kind === "QUOTE";
   const taxableCents = invoice.lines.reduce((s, l) => s + (l.taxable ? l.totalCents : 0), 0);
+  const [taxLocation, salesTaxOn] = await Promise.all([
+    invoice.taxLocationId
+      ? prisma.taxLocation.findFirst({
+          where: { id: invoice.taxLocationId, accountId },
+          select: { name: true },
+        })
+      : null,
+    prisma.taxAuthority.count({ where: { accountId } }).then((n) => n > 0),
+  ]);
+  const salesTaxReview =
+    salesTaxOn &&
+    !isQuote &&
+    invoice.status !== "CANCELLED" &&
+    (!taxLocation || invoice.lines.some((l) => l.productType === "UNCLASSIFIED"));
   const acceptedInvoice = invoice.convertedToInvoiceId
     ? await prisma.invoice.findFirst({
         where: { id: invoice.convertedToInvoiceId, accountId },
@@ -119,6 +140,7 @@ export default async function InvoiceDetailPage({
           }
         />
         <Row label="Due date" value={invoice.dueDate ? formatDate(invoice.dueDate) : null} />
+        <Row label="Taxed at" value={taxLocation?.name} />
         <Row label="Terms" value={invoice.terms} />
         <Row label="Notes" value={invoice.notes} />
       </Card>
@@ -133,6 +155,9 @@ export default async function InvoiceDetailPage({
                 <div className="text-sm text-stone-500">
                   {line.quantity} × {formatCents(line.unitPriceCents)}
                   {line.taxable ? "" : " · not taxed"}
+                  {line.productType !== "UNCLASSIFIED"
+                    ? ` · ${PRODUCT_TYPE_LABELS[line.productType as ProductType] ?? line.productType}`
+                    : ""}
                 </div>
               </div>
               <span className="shrink-0 text-right font-semibold tabular-nums text-stone-900">
@@ -195,6 +220,19 @@ export default async function InvoiceDetailPage({
           ) : null}
         </div>
       </Card>
+
+      {salesTaxReview ? (
+        <Link
+          href={
+            invoice.status === "DRAFT"
+              ? `/invoices/${invoice.id}/edit`
+              : `/tax/sales/review?month=${periodOf(invoice.issueDate)}&invoice=${invoice.id}#inv-${invoice.id}`
+          }
+          className="mb-4 block rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900"
+        >
+          Sales tax: {!taxLocation ? "where it's taxed" : "kind of sale"} not set — review →
+        </Link>
+      ) : null}
 
       {isQuote && acceptedInvoice ? (
         <Card className="mb-4 border-oak-200 bg-oak-50">

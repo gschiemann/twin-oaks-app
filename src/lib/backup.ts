@@ -40,6 +40,12 @@ export async function buildBackup(accountId?: string) {
     bankImportProfiles,
     documents,
     recurringBills,
+    taxAuthorities,
+    taxRates,
+    taxLocations,
+    salesTaxRules,
+    salesTaxSnapshots,
+    salesTaxFilings,
   ] = await Promise.all([
     prisma.vendor.findMany({ where }),
     prisma.receipt.findMany({ where }),
@@ -66,6 +72,12 @@ export async function buildBackup(accountId?: string) {
     prisma.bankImportProfile.findMany({ where }),
     prisma.document.findMany({ where }),
     prisma.recurringBill.findMany({ where }),
+    prisma.taxAuthority.findMany({ where }),
+    prisma.taxRate.findMany({ where }),
+    prisma.taxLocation.findMany({ where }),
+    prisma.salesTaxRule.findMany({ where }),
+    prisma.salesTaxSnapshot.findMany({ where }),
+    prisma.salesTaxFiling.findMany({ where }),
   ]);
 
   const data = {
@@ -94,11 +106,17 @@ export async function buildBackup(accountId?: string) {
     bankImportProfiles,
     documents,
     recurringBills,
+    taxAuthorities,
+    taxRates,
+    taxLocations,
+    salesTaxRules,
+    salesTaxSnapshots,
+    salesTaxFilings,
   };
 
   return {
     app: "twin-oaks-os",
-    schemaVersion: 5,
+    schemaVersion: 6,
     exportedAt: new Date().toISOString(),
     // Derived from `data` itself, so a table can never appear in the export
     // but go missing from the counts (or vice versa).

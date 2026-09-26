@@ -695,6 +695,126 @@ const DDL: string[] = [
     CONSTRAINT "RecurringBill_pkey" PRIMARY KEY ("id")
 )`,
   `CREATE INDEX IF NOT EXISTS "RecurringBill_accountId_idx" ON "RecurringBill"("accountId")`,
+
+  // ————— V6.0: sales tax (Alabama state + local) —————
+  // Columns first: they are additive and nullable/defaulted, so existing
+  // invoices keep working and historic lines land as UNCLASSIFIED (review).
+  `ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "taxLocationId" TEXT`,
+  `ALTER TABLE "InvoiceLine" ADD COLUMN IF NOT EXISTS "productType" TEXT NOT NULL DEFAULT 'UNCLASSIFIED'`,
+  `ALTER TABLE "InvoiceLine" ADD COLUMN IF NOT EXISTS "taxTreatmentOverride" TEXT`,
+  `ALTER TABLE "InvoiceLine" ADD COLUMN IF NOT EXISTS "exemptionReason" TEXT`,
+  `ALTER TABLE "InvoiceLine" ADD COLUMN IF NOT EXISTS "evidenceDocumentId" TEXT`,
+  `ALTER TABLE "InvoiceLine" ADD COLUMN IF NOT EXISTS "originalLineId" TEXT`,
+  `ALTER TABLE "LivestockSale" ADD COLUMN IF NOT EXISTS "taxLocationId" TEXT`,
+  `ALTER TABLE "LivestockSale" ADD COLUMN IF NOT EXISTS "taxTreatmentOverride" TEXT`,
+  `ALTER TABLE "LivestockSale" ADD COLUMN IF NOT EXISTS "exemptionReason" TEXT`,
+  `ALTER TABLE "BusinessProfile" ADD COLUMN IF NOT EXISTS "salesTaxBasis" TEXT`,
+  `ALTER TABLE "BusinessProfile" ADD COLUMN IF NOT EXISTS "salesTaxBasisApprovedBy" TEXT`,
+  `ALTER TABLE "BusinessProfile" ADD COLUMN IF NOT EXISTS "salesTaxBasisApprovedAt" TIMESTAMP(3)`,
+
+  `CREATE TABLE IF NOT EXISTS "TaxAuthority" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "level" TEXT NOT NULL,
+    "jurisdictionCode" TEXT NOT NULL DEFAULT '',
+    "taxType" TEXT NOT NULL,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "TaxAuthority_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "TaxAuthority_accountId_idx" ON "TaxAuthority"("accountId")`,
+
+  `CREATE TABLE IF NOT EXISTS "TaxRate" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "authorityId" TEXT NOT NULL,
+    "rateClass" TEXT NOT NULL,
+    "rateTypeCode" TEXT NOT NULL,
+    "ratePpm" INTEGER NOT NULL,
+    "effectiveFrom" TIMESTAMP(3) NOT NULL,
+    "effectiveTo" TIMESTAMP(3),
+    "source" TEXT NOT NULL,
+    "confirmedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "TaxRate_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "TaxRate_accountId_authorityId_idx" ON "TaxRate"("accountId", "authorityId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "TaxRate" ADD CONSTRAINT "TaxRate_authorityId_fkey" FOREIGN KEY ("authorityId") REFERENCES "TaxAuthority"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+
+  `CREATE TABLE IF NOT EXISTS "TaxLocation" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "address" TEXT,
+    "city" TEXT,
+    "county" TEXT,
+    "state" TEXT NOT NULL DEFAULT 'AL',
+    "postalCode" TEXT,
+    "insideCity" BOOLEAN NOT NULL DEFAULT false,
+    "policeJurisdiction" TEXT,
+    "authorityIdsCsv" TEXT NOT NULL DEFAULT '',
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "TaxLocation_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "TaxLocation_accountId_idx" ON "TaxLocation"("accountId")`,
+
+  `CREATE TABLE IF NOT EXISTS "SalesTaxRule" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "productType" TEXT NOT NULL,
+    "treatment" TEXT NOT NULL,
+    "rateClass" TEXT NOT NULL DEFAULT 'GENERAL',
+    "exemptionReason" TEXT,
+    "requiresEvidence" BOOLEAN NOT NULL DEFAULT false,
+    "approvedBy" TEXT NOT NULL,
+    "approvedAt" TIMESTAMP(3) NOT NULL,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "SalesTaxRule_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "SalesTaxRule_accountId_idx" ON "SalesTaxRule"("accountId")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "SalesTaxRule_accountId_productType_key" ON "SalesTaxRule"("accountId", "productType")`,
+
+  `CREATE TABLE IF NOT EXISTS "SalesTaxSnapshot" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "period" TEXT NOT NULL,
+    "kind" TEXT NOT NULL,
+    "basis" TEXT NOT NULL,
+    "reviewerName" TEXT NOT NULL,
+    "note" TEXT,
+    "grossSalesCents" INTEGER NOT NULL,
+    "taxableCents" INTEGER NOT NULL,
+    "taxCents" INTEGER NOT NULL,
+    "snapshotJson" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "SalesTaxSnapshot_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "SalesTaxSnapshot_accountId_period_idx" ON "SalesTaxSnapshot"("accountId", "period")`,
+
+  // LAST on purpose — the probe targets this table, so its presence proves
+  // every earlier V6 statement ran.
+  `CREATE TABLE IF NOT EXISTS "SalesTaxFiling" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "period" TEXT NOT NULL,
+    "snapshotId" TEXT,
+    "filedOn" TIMESTAMP(3) NOT NULL,
+    "confirmationNumber" TEXT,
+    "amountPaidCents" INTEGER,
+    "filedBy" TEXT NOT NULL,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "SalesTaxFiling_pkey" PRIMARY KEY ("id")
+)`,
+  `CREATE INDEX IF NOT EXISTS "SalesTaxFiling_accountId_period_idx" ON "SalesTaxFiling"("accountId", "period")`,
 ];
 
 export type DbStatus =
@@ -723,7 +843,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
     // Probe the NEWEST schema element (table OR column) — if an older
     // deploy's schema is present but anything newer is missing, the
     // idempotent DDL below fills the gap.
-    await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "RecurringBill" LIMIT 1`);
+    await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "SalesTaxFiling" LIMIT 1`);
     return { ok: true }; // schema already present
   } catch (probeErr) {
     // Something missing (or connection issue) — attempt to apply the schema.
@@ -731,7 +851,7 @@ async function ensureSchemaOnce(): Promise<DbStatus> {
       for (const stmt of DDL) {
         await prisma.$executeRawUnsafe(stmt);
       }
-      await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "RecurringBill" LIMIT 1`);
+      await prisma.$queryRawUnsafe(`SELECT "accountId" FROM "SalesTaxFiling" LIMIT 1`);
       console.log("[twin-oaks] database schema applied by self-heal");
       return { ok: true };
     } catch (healErr) {
